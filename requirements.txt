@@ -1,0 +1,6 @@
+futu-api>=8.0
+pandas>=1.5
+numpy>=1.21
+plotly>=5.0
+streamlit>=1.30
+pytest>=7.0
