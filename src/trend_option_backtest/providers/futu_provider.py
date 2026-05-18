@@ -32,6 +32,75 @@ class FutuHistoricalDataProvider:
     def __init__(self, config: FutuDataConfig | None = None) -> None:
         self.config = config or FutuDataConfig()
 
+    def get_account_info(
+        self,
+        *,
+        market: str = "US",
+        trd_env: str = "SIMULATE",
+        acc_id: int | None = None,
+    ) -> dict[str, object]:
+        try:
+            from futu import OpenSecTradeContext, RET_OK, TrdEnv, TrdMarket
+        except ImportError as exc:
+            raise RuntimeError("缺少 futu-api，请先安装 requirements.txt") from exc
+
+        market_map = {
+            "US": TrdMarket.US,
+            "HK": TrdMarket.HK,
+            "HKCC": TrdMarket.HKCC,
+            "CN": TrdMarket.CN,
+            "SG": TrdMarket.SG,
+        }
+        trd_env_map = {
+            "SIMULATE": TrdEnv.SIMULATE,
+            "REAL": TrdEnv.REAL,
+        }
+        market_key = market.upper().strip()
+        trd_env_key = trd_env.upper().strip()
+        if market_key not in market_map:
+            raise ValueError(f"不支持的交易市场：{market}")
+        if trd_env_key not in trd_env_map:
+            raise ValueError(f"不支持的交易环境：{trd_env}")
+
+        trd_ctx = OpenSecTradeContext(filter_trdmarket=market_map[market_key], host=self.config.host, port=self.config.port)
+        try:
+            query_args = {"trd_env": trd_env_map[trd_env_key], "refresh_cache": True}
+            if acc_id is not None:
+                query_args["acc_id"] = int(acc_id)
+            ret, data = trd_ctx.accinfo_query(**query_args)
+            if ret != RET_OK:
+                raise RuntimeError(f"富途资金查询失败：{data}")
+        finally:
+            trd_ctx.close()
+
+        if data.empty:
+            raise RuntimeError("富途资金查询结果为空。")
+
+        row = data.iloc[0]
+
+        def first_number(columns: list[str]) -> float | None:
+            for column in columns:
+                if column in data.columns and pd.notna(row[column]):
+                    return float(row[column])
+            return None
+
+        total_assets = first_number(["total_assets", "total_asset", "assets", "net_assets", "market_val"])
+        cash = first_number(["cash", "cash_balance", "available_cash", "withdraw_cash"])
+        buying_power = first_number(["power", "buying_power", "cash_power", "net_cash_power", "max_power_long"])
+        currency = str(row["currency"]) if "currency" in data.columns and pd.notna(row["currency"]) else ""
+        plan_capital = next((value for value in [buying_power, cash, total_assets] if value is not None and value > 0), 0.0)
+
+        return {
+            "market": market_key,
+            "trd_env": trd_env_key,
+            "acc_id": int(acc_id) if acc_id is not None else "",
+            "currency": currency,
+            "total_assets": total_assets,
+            "cash": cash,
+            "buying_power": buying_power,
+            "plan_capital": plan_capital,
+        }
+
     def get_positions(
         self,
         *,
@@ -77,9 +146,9 @@ class FutuHistoricalDataProvider:
             return pd.DataFrame(columns=["标的", "持仓股数", "成本价"])
 
         code_column = "code" if "code" in data.columns else "stock_code"
-        qty_column = "qty" if "qty" in data.columns else "position_qty"
+        qty_column = next((column for column in ["qty", "position_qty", "quantity", "position"] if column in data.columns), "")
         cost_column = next(
-            (column for column in ["average_cost", "avg_cost", "cost_price"] if column in data.columns),
+            (column for column in ["average_cost", "avg_cost", "cost_price", "diluted_cost"] if column in data.columns),
             None,
         )
         if code_column not in data.columns or qty_column not in data.columns:
@@ -88,7 +157,7 @@ class FutuHistoricalDataProvider:
         rows = []
         for _, row in data.iterrows():
             shares = float(row[qty_column])
-            if shares <= 0:
+            if shares == 0:
                 continue
             code = str(row[code_column]).upper().strip()
             cost = float(row[cost_column]) if cost_column and pd.notna(row[cost_column]) else 0.0

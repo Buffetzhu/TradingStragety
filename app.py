@@ -16,6 +16,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from trend_option_backtest.demo_data import make_demo_market_data
+from trend_option_backtest.exporting import build_strategy_plan_export_frame
 from trend_option_backtest.models import StrategyConfig
 from trend_option_backtest.providers.futu_provider import FutuDataConfig, FutuHistoricalDataProvider, normalize_symbol
 from trend_option_backtest.services.backtest_service import BacktestService
@@ -26,8 +27,29 @@ DEFAULT_CONFIG_PATH = ROOT / "config" / "default_config.json"
 BACKTEST_HISTORY_PATH = ROOT / "data" / "backtest_run_history.csv"
 STRATEGY_PRESETS_PATH = ROOT / "data" / "strategy_presets.json"
 CURRENT_POSITIONS_PATH = ROOT / "data" / "current_positions.csv"
+APP_VERSION = (ROOT / "VERSION").read_text(encoding="utf-8").strip() if (ROOT / "VERSION").exists() else "dev"
 BACKTEST_HISTORY_LIMIT = 200
 POSITION_COLUMNS = ["标的", "持仓股数", "成本价"]
+POSITION_EDITOR_COLUMNS = ["市场", "类型", "正股标的", *POSITION_COLUMNS]
+OPTION_SYMBOL_RE = re.compile(r"^(?P<market>[A-Z]+)\.(?P<underlying>[A-Z]{1,10})(?P<expiry>\d{6})(?P<option_type>[CP])(?P<strike>\d+)$")
+MARKET_LABELS = {
+    "HK": "港股",
+    "US": "美股",
+    "SH": "A股",
+    "SZ": "A股",
+    "CN": "A股",
+    "SG": "新加坡",
+    "HKCC": "港股通",
+}
+MARKET_SORT_ORDER = {
+    "HK": 1,
+    "HKCC": 1,
+    "US": 2,
+    "SH": 3,
+    "SZ": 3,
+    "CN": 3,
+    "SG": 4,
+}
 BACKTEST_PERIOD_OPTIONS = {
     "1 个月": 1 / 12,
     "3 个月": 0.25,
@@ -74,6 +96,12 @@ def format_profit_factor(value: float | int | str, closed_trade_count: int) -> s
     return f"{float(value):.2f}"
 
 
+def format_money(value: float | int | None) -> str:
+    if value is None or pd.isna(value):
+        return "N/A"
+    return f"${float(value):,.2f}"
+
+
 def dataframe_to_csv_bytes(frame: pd.DataFrame) -> bytes:
     return frame.to_csv(index=False).encode("utf-8-sig")
 
@@ -95,6 +123,55 @@ def normalize_app_symbols(symbols: list[str]) -> list[str]:
             continue
         normalized_symbols.append(normalize_app_symbol(clean))
     return list(dict.fromkeys(normalized_symbols))
+
+
+def get_symbol_market(symbol: str) -> str:
+    normalized = normalize_app_symbol(symbol)
+    if "." not in normalized:
+        return "US"
+    return normalized.split(".", 1)[0]
+
+
+def get_symbol_market_label(symbol: str) -> str:
+    market = get_symbol_market(symbol)
+    return MARKET_LABELS.get(market, market or "其他")
+
+
+def symbol_market_sort_key(symbol: str) -> tuple[int, str]:
+    market = get_symbol_market(symbol)
+    return (MARKET_SORT_ORDER.get(market, 99), normalize_app_symbol(symbol))
+
+
+def parse_option_symbol(symbol: str) -> dict[str, str | float] | None:
+    normalized = normalize_app_symbol(symbol)
+    match = OPTION_SYMBOL_RE.match(normalized)
+    if not match:
+        return None
+    market = match.group("market")
+    underlying = match.group("underlying")
+    option_type = "Call" if match.group("option_type") == "C" else "Put"
+    expiry = match.group("expiry")
+    strike = int(match.group("strike")) / 1000
+    return {
+        "market": market,
+        "underlying": f"{market}.{underlying}",
+        "expiry": f"20{expiry[:2]}-{expiry[2:4]}-{expiry[4:6]}",
+        "option_type": option_type,
+        "strike": strike,
+    }
+
+
+def get_instrument_type(symbol: str) -> str:
+    return "期权" if parse_option_symbol(symbol) else "正股/ETF"
+
+
+def get_underlying_symbol(symbol: str) -> str:
+    option_info = parse_option_symbol(symbol)
+    return str(option_info["underlying"]) if option_info else normalize_app_symbol(symbol)
+
+
+def is_stock_like_symbol(symbol: str) -> bool:
+    return parse_option_symbol(symbol) is None
 
 
 def load_backtest_history() -> list[dict]:
@@ -156,11 +233,12 @@ def save_current_positions(frame: pd.DataFrame) -> None:
     normalized["标的"] = normalized["标的"].map(normalize_app_symbol)
     normalized["持仓股数"] = pd.to_numeric(normalized["持仓股数"], errors="coerce").fillna(0.0)
     normalized["成本价"] = pd.to_numeric(normalized["成本价"], errors="coerce").fillna(0.0)
-    normalized = normalized[(normalized["标的"] != "") & (normalized["持仓股数"] > 0)]
+    normalized = normalized[(normalized["标的"] != "") & (normalized["持仓股数"].abs() > 1e-12)]
     if not normalized.empty:
-        normalized["持仓成本"] = normalized["持仓股数"] * normalized["成本价"]
+        normalized["持仓成本"] = normalized["持仓股数"].abs() * normalized["成本价"]
         normalized = normalized.groupby("标的", as_index=False).agg({"持仓股数": "sum", "持仓成本": "sum"})
-        normalized["成本价"] = normalized["持仓成本"] / normalized["持仓股数"]
+        normalized = normalized[normalized["持仓股数"].abs() > 1e-12]
+        normalized["成本价"] = normalized["持仓成本"] / normalized["持仓股数"].abs()
         normalized = normalized[POSITION_COLUMNS]
     normalized.to_csv(CURRENT_POSITIONS_PATH, index=False, encoding="utf-8-sig")
 
@@ -171,18 +249,21 @@ def build_position_editor_frame(symbols: list[str], saved_positions: pd.DataFram
         for _, row in saved_positions.iterrows()
         if str(row["标的"]).strip()
     }
-    editor_symbols = normalize_app_symbols([*symbols, *saved_by_symbol.keys()])
+    editor_symbols = sorted(normalize_app_symbols([*symbols, *saved_by_symbol.keys()]), key=symbol_market_sort_key)
     rows = []
     for symbol in editor_symbols:
         saved_row = saved_by_symbol.get(symbol)
         rows.append(
             {
+                "市场": get_symbol_market_label(symbol),
+                "类型": get_instrument_type(symbol),
+                "正股标的": get_underlying_symbol(symbol),
                 "标的": symbol,
                 "持仓股数": float(saved_row["持仓股数"]) if saved_row is not None else 0.0,
                 "成本价": float(saved_row["成本价"]) if saved_row is not None else 0.0,
             }
         )
-    return pd.DataFrame(rows, columns=POSITION_COLUMNS)
+    return pd.DataFrame(rows, columns=POSITION_EDITOR_COLUMNS)
 
 
 def build_current_positions_map(frame: pd.DataFrame) -> dict[str, dict[str, float]]:
@@ -196,12 +277,47 @@ def build_current_positions_map(frame: pd.DataFrame) -> dict[str, dict[str, floa
     for _, row in normalized.iterrows():
         symbol = normalize_app_symbol(row["标的"])
         shares = float(row["持仓股数"])
-        if symbol and shares > 0:
+        if symbol and abs(shares) > 1e-12:
             positions[symbol] = {
                 "shares": shares,
                 "avg_cost": max(0.0, float(row["成本价"])),
             }
     return positions
+
+
+def get_position_symbols(frame: pd.DataFrame) -> list[str]:
+    if frame.empty or "标的" not in frame.columns:
+        return []
+    normalized = frame.copy()
+    normalized["标的"] = normalized["标的"].map(normalize_app_symbol)
+    if "持仓股数" in normalized.columns:
+        normalized["持仓股数"] = pd.to_numeric(normalized["持仓股数"], errors="coerce").fillna(0.0)
+        normalized = normalized[normalized["持仓股数"].abs() > 1e-12]
+    stock_symbols = [symbol for symbol in normalized["标的"].tolist() if is_stock_like_symbol(symbol)]
+    return normalize_app_symbols(stock_symbols)
+
+
+def get_option_position_symbols(frame: pd.DataFrame) -> list[str]:
+    if frame.empty or "标的" not in frame.columns:
+        return []
+    normalized = frame.copy()
+    normalized["标的"] = normalized["标的"].map(normalize_app_symbol)
+    if "持仓股数" in normalized.columns:
+        normalized["持仓股数"] = pd.to_numeric(normalized["持仓股数"], errors="coerce").fillna(0.0)
+        normalized = normalized[normalized["持仓股数"].abs() > 1e-12]
+    option_symbols = [symbol for symbol in normalized["标的"].tolist() if not is_stock_like_symbol(symbol)]
+    return normalize_app_symbols(option_symbols)
+
+
+def add_symbols_to_payload(payload: dict, symbols: list[str], *, participate: bool) -> dict:
+    normalized_symbols = normalize_app_symbols(symbols)
+    updated_payload = payload.copy()
+    updated_payload["default_pool"] = normalize_app_symbols([*payload.get("default_pool", []), *normalized_symbols])
+    if participate:
+        updated_payload["default_backtest_symbols"] = normalize_app_symbols(
+            [*payload.get("default_backtest_symbols", []), *normalized_symbols]
+        )
+    return updated_payload
 
 
 def get_current_position(symbol: str, current_positions: dict[str, dict[str, float]]) -> dict[str, float] | None:
@@ -372,11 +488,11 @@ def build_strategy_watchlist(
         current_position_cost = 0.0
         current_position_source = "回测模拟"
         manual_position = get_current_position(symbol, current_positions)
-        if manual_position and float(manual_position.get("shares", 0.0)) > 0:
+        if manual_position and abs(float(manual_position.get("shares", 0.0))) > 1e-12:
             current_position_source = "手动持仓"
             current_position_shares = float(manual_position.get("shares", 0.0))
             current_position_cost = float(manual_position.get("avg_cost", 0.0))
-            current_position_value = current_position_shares * close
+            current_position_value = abs(current_position_shares) * close
         elif latest_trade and latest_trade["action"] != "清仓" and symbol in equity_df.columns:
             last_symbol_equity = float(equity_df[symbol].dropna().iloc[-1])
             current_position_value = max(0.0, last_symbol_equity - float(latest_trade["cash_after"]))
@@ -384,11 +500,11 @@ def build_strategy_watchlist(
             current_position_cost = max(0.0, float(latest_trade.get("avg_cost_after", 0.0)))
         current_position_pct = current_position_value / config.initial_capital if config.initial_capital else 0.0
         unrealized_pnl = (
-            current_position_value - current_position_shares * current_position_cost
-            if current_position_shares > 0 and current_position_cost > 0
+            current_position_shares * (close - current_position_cost)
+            if abs(current_position_shares) > 1e-12 and current_position_cost > 0
             else 0.0
         )
-        status = "持仓" if current_position_pct > 0 else "空仓"
+        status = "持仓" if abs(current_position_shares) > 1e-12 or current_position_pct > 0 else "空仓"
 
         trend_ok = ma_short > ma_long
         sector_ok = bool(last_row["sector_ok"])
@@ -427,6 +543,7 @@ def build_strategy_watchlist(
 
         rows.append(
             {
+                "市场": get_symbol_market_label(symbol),
                 "标的": symbol,
                 "状态": status,
                 "收盘价": close,
@@ -458,25 +575,33 @@ def build_strategy_watchlist(
                 "下一步关注": next_action,
             }
         )
-    return pd.DataFrame(rows)
+    frame = pd.DataFrame(rows)
+    if frame.empty:
+        return frame
+    frame["_market_sort"] = frame["标的"].map(lambda symbol: symbol_market_sort_key(symbol)[0])
+    return frame.sort_values(["_market_sort", "标的"]).drop(columns=["_market_sort"]).reset_index(drop=True)
 
 
-def build_strategy_plan(watchlist_df: pd.DataFrame, config: StrategyConfig) -> pd.DataFrame:
+def build_strategy_plan(watchlist_df: pd.DataFrame, config: StrategyConfig, plan_capital: float | None = None) -> pd.DataFrame:
     if watchlist_df.empty:
         return pd.DataFrame()
 
     rows = []
-    symbol_capital = config.initial_capital / len(config.default_backtest_symbols) if config.default_backtest_symbols else 0.0
+    capital_base = float(plan_capital) if plan_capital and plan_capital > 0 else config.initial_capital
+    symbol_capital = capital_base / len(config.default_backtest_symbols) if config.default_backtest_symbols else 0.0
     for _, row in watchlist_df.iterrows():
         status = str(row["状态"])
         signals = str(row["当前信号"])
         close = float(row["收盘价"])
         position_value = float(row.get("当前持仓市值", 0.0))
+        position_shares = float(row.get("当前持仓股数", 0.0))
         distance_to_key = float(row["距关键价位"])
         priority_rank = 5
         priority = "观察等待"
         plan_action = "等待"
         reference_amount = None
+        suggested_shares = None
+        target_position_delta = 0.0
         amount_note = "暂不交易"
         trigger = str(row["下一步关注"])
         risk_control = str(row["关键价位"])
@@ -488,6 +613,8 @@ def build_strategy_plan(watchlist_df: pd.DataFrame, config: StrategyConfig) -> p
                 priority = "立即处理"
                 plan_action = "清仓"
                 reference_amount = position_value
+                suggested_shares = position_shares
+                target_position_delta = -position_value
                 amount_note = "当前清仓参考"
                 note = "趋势防线失效，优先保护本金和已有利润。"
             elif "减仓" in signals:
@@ -495,6 +622,8 @@ def build_strategy_plan(watchlist_df: pd.DataFrame, config: StrategyConfig) -> p
                 priority = "降低风险"
                 plan_action = "减仓"
                 reference_amount = position_value * config.reduce_position_pct
+                suggested_shares = position_shares * config.reduce_position_pct
+                target_position_delta = -reference_amount
                 amount_note = "当前减仓参考"
                 risk_control = "短线过热区"
                 note = f"按当前规则先减掉约 {format_pct(config.reduce_position_pct)} 持仓，等待冷却。"
@@ -503,6 +632,8 @@ def build_strategy_plan(watchlist_df: pd.DataFrame, config: StrategyConfig) -> p
                 priority = "顺势加仓"
                 plan_action = "加仓"
                 reference_amount = symbol_capital * config.add_position_pct
+                suggested_shares = reference_amount / close if close > 0 else None
+                target_position_delta = reference_amount
                 amount_note = "当前加仓参考"
                 note = f"回踩 MA{config.ma_short} 后收回，适合小步顺势增加仓位。"
             else:
@@ -516,24 +647,30 @@ def build_strategy_plan(watchlist_df: pd.DataFrame, config: StrategyConfig) -> p
                 priority = "准备入场"
                 plan_action = "建仓"
                 reference_amount = symbol_capital * config.entry_position_pct
+                suggested_shares = reference_amount / close if close > 0 else None
+                target_position_delta = reference_amount
                 amount_note = "当前建仓参考"
                 note = f"突破和量能条件满足，按首次建仓比例 {format_pct(config.entry_position_pct)} 执行。"
             else:
                 priority_rank = 5 if distance_to_key < -0.03 else 4
                 priority = "观察等待" if priority_rank == 5 else "接近触发"
                 plan_action = "等待触发"
-                reference_amount = symbol_capital * config.entry_position_pct
-                amount_note = "触发后建仓参考"
+                trigger_amount = symbol_capital * config.entry_position_pct
+                trigger_shares = trigger_amount / close if close > 0 else 0.0
+                amount_note = f"触发后参考 {format_money(trigger_amount)} / {trigger_shares:,.4f} 股"
                 note = "未满足完整入场条件，先放入观察队列。"
 
         rows.append(
             {
                 "优先级排序": priority_rank,
+                "市场": row.get("市场", get_symbol_market_label(row["标的"])),
                 "标的": row["标的"],
                 "状态": status,
                 "计划动作": plan_action,
                 "优先级": priority,
                 "参考交易金额": reference_amount,
+                "建议股数": suggested_shares,
+                "目标仓位差额": target_position_delta,
                 "金额说明": amount_note,
                 "收盘价": close,
                 "距关键价位": distance_to_key,
@@ -544,7 +681,189 @@ def build_strategy_plan(watchlist_df: pd.DataFrame, config: StrategyConfig) -> p
         )
 
     plan_df = pd.DataFrame(rows)
-    return plan_df.sort_values(["优先级排序", "距关键价位"], ascending=[True, False]).reset_index(drop=True)
+    plan_df["_market_sort"] = plan_df["标的"].map(lambda symbol: symbol_market_sort_key(symbol)[0])
+    return plan_df.sort_values(["_market_sort", "优先级排序", "距关键价位"], ascending=[True, True, False]).drop(
+        columns=["_market_sort"]
+    ).reset_index(drop=True)
+
+
+def assess_option_overlay(option_type: str, direction: str, underlying_plan: pd.Series | None) -> tuple[str, str, str]:
+    if underlying_plan is None:
+        return (
+            "待关联正股",
+            "先将正股加入股票池并运行回测，再判断这张期权是否服务于当前策略计划。",
+            "缺少正股计划，暂不判断保护或增强收益效果。",
+        )
+
+    plan_action = str(underlying_plan["计划动作"])
+    status = str(underlying_plan["状态"])
+    reducing_risk = plan_action in {"清仓", "减仓"}
+    increasing_exposure = plan_action in {"建仓", "加仓"}
+
+    if option_type == "Put" and direction == "多头":
+        if reducing_risk:
+            return (
+                "保护性 Put",
+                "正股计划正在降风险，Put 可作为下行保护；若正股减掉较多，需同步评估是否止盈或降低保护仓。",
+                "关注权利金回吐、到期时间和正股减仓后的保护比例是否过高。",
+            )
+        return (
+            "保护性 Put",
+            "正股仍在观察或持有，Put 可作为保险仓；先确认保护成本是否在可接受范围内。",
+            "时间价值会持续衰减，正股不跌时保护仓可能拖累组合收益。",
+        )
+
+    if option_type == "Put" and direction == "空头":
+        if reducing_risk:
+            return (
+                "卖出 Put 风险敞口",
+                "正股计划偏降风险，但卖出 Put 会在下跌时增加接股义务；优先评估是否需要回补或降低张数。",
+                "下跌、波动率上升或被指派时，组合风险会放大。",
+            )
+        return (
+            "现金担保 Put",
+            "若本来愿意低位接正股，可作为等待入场的增强收益仓；需要预留足额购买力。",
+            "标的快速下跌时可能被动接股，需提前确认可承受的最大正股仓位。",
+        )
+
+    if option_type == "Call" and direction == "多头":
+        if reducing_risk:
+            return (
+                "进攻性 Call",
+                "正股计划偏降风险，Call 与当前风控方向不完全一致；只适合保留小额上行观察仓。",
+                "到期前若趋势未恢复，权利金可能快速损耗。",
+            )
+        if increasing_exposure:
+            return (
+                "进攻性 Call",
+                "正股计划偏建仓或加仓，Call 可作为有限亏损的上行替代；注意别和正股加仓重复放大风险。",
+                "杠杆敞口高，需控制权利金占组合比例。",
+            )
+        return (
+            "上行观察 Call",
+            "正股未触发强动作，Call 适合按小仓位跟踪趋势恢复。",
+            "时间价值衰减较快，等待信号时不宜让权利金暴露过大。",
+        )
+
+    if option_type == "Call" and direction == "空头":
+        if status == "持仓" and not reducing_risk:
+            return (
+                "备兑 Call",
+                "正股仍在持仓跟踪，卖出 Call 更偏增强收益；需要确认行权价不会过早限制核心持仓上涨空间。",
+                "突破行情中可能被迫让渡上行收益。",
+            )
+        if reducing_risk:
+            return (
+                "卖出 Call 风险敞口",
+                "正股计划若减仓或清仓，卖出 Call 可能从备兑变成裸露风险；先同步检查正股覆盖数量。",
+                "正股强反弹时，裸卖 Call 风险不对称。",
+            )
+        return (
+            "卖出 Call 增强收益",
+            "正股尚未确认持仓覆盖，先确认是否有足够正股或组合对冲，再把它视为增强收益仓。",
+            "缺少覆盖时，上涨风险可能超过已收权利金。",
+        )
+
+    return (
+        "待复核",
+        "期权方向无法归类到当前简化 Overlay 规则，先保留人工复核。",
+        "检查期权代码、持仓方向和正股计划是否正确。",
+    )
+
+
+def get_option_days_to_expiry(expiry: str) -> int | None:
+    expiry_date = pd.to_datetime(expiry, errors="coerce")
+    if pd.isna(expiry_date):
+        return None
+    return int((expiry_date.normalize() - pd.Timestamp.today().normalize()).days)
+
+
+def build_option_coverage(option_type: str, direction: str, contract_shares: float, underlying_shares: float) -> tuple[float | None, str]:
+    if contract_shares <= 0:
+        return None, "缺少合约数量"
+    if abs(underlying_shares) <= 1e-12:
+        if option_type == "Put" and direction == "空头":
+            return None, "无正股，需用现金或购买力覆盖潜在接股"
+        return None, "无对应正股持仓"
+
+    if option_type == "Put" and direction == "多头":
+        return contract_shares / abs(underlying_shares), "保护比例"
+    if option_type == "Call" and direction == "空头":
+        return abs(underlying_shares) / contract_shares, "备兑覆盖比例"
+    if option_type == "Call" and direction == "多头":
+        return contract_shares / abs(underlying_shares), "上行杠杆敞口比例"
+    if option_type == "Put" and direction == "空头":
+        return contract_shares / abs(underlying_shares), "潜在接股比例"
+    return None, "待复核"
+
+
+def build_option_overlay_summary(positions_df: pd.DataFrame, strategy_plan_df: pd.DataFrame) -> pd.DataFrame:
+    if positions_df.empty:
+        return pd.DataFrame()
+
+    normalized = positions_df.copy()
+    normalized["标的"] = normalized["标的"].map(normalize_app_symbol)
+    normalized["持仓股数"] = pd.to_numeric(normalized["持仓股数"], errors="coerce").fillna(0.0)
+    normalized["成本价"] = pd.to_numeric(normalized["成本价"], errors="coerce").fillna(0.0)
+    underlying_positions = {
+        normalize_app_symbol(row["标的"]): float(row["持仓股数"])
+        for _, row in normalized.iterrows()
+        if is_stock_like_symbol(str(row["标的"])) and abs(float(row["持仓股数"])) > 1e-12
+    }
+    plan_by_symbol = {
+        normalize_app_symbol(row["标的"]): row
+        for _, row in strategy_plan_df.iterrows()
+        if str(row.get("标的", "")).strip()
+    }
+
+    rows = []
+    for _, row in normalized.iterrows():
+        symbol = normalize_app_symbol(row["标的"])
+        option_info = parse_option_symbol(symbol)
+        shares = float(row["持仓股数"])
+        if option_info is None or abs(shares) <= 1e-12:
+            continue
+
+        underlying = str(option_info["underlying"])
+        underlying_plan = plan_by_symbol.get(underlying)
+        direction = "多头" if shares > 0 else "空头"
+        role, overlay_note, risk_note = assess_option_overlay(str(option_info["option_type"]), direction, underlying_plan)
+        contract_shares = abs(shares) * 100
+        underlying_shares = float(underlying_positions.get(underlying, 0.0))
+        coverage_ratio, coverage_label = build_option_coverage(
+            str(option_info["option_type"]), direction, contract_shares, underlying_shares
+        )
+        rows.append(
+            {
+                "市场": get_symbol_market_label(symbol),
+                "期权代码": symbol,
+                "正股标的": underlying,
+                "期权类型": option_info["option_type"],
+                "到期日": option_info["expiry"],
+                "到期天数": get_option_days_to_expiry(str(option_info["expiry"])),
+                "行权价": option_info["strike"],
+                "持仓方向": direction,
+                "持仓数量": shares,
+                "合约对应股数": contract_shares,
+                "正股持仓股数": underlying_shares,
+                "覆盖口径": coverage_label,
+                "覆盖/保护比例": coverage_ratio,
+                "成本价": float(row["成本价"]),
+                "正股计划动作": str(underlying_plan["计划动作"]) if underlying_plan is not None else "未纳入回测",
+                "正股优先级": str(underlying_plan["优先级"]) if underlying_plan is not None else "未纳入回测",
+                "正股触发依据": str(underlying_plan["触发依据"]) if underlying_plan is not None else "请先将正股加入股票池并运行回测",
+                "正股风控关注": str(underlying_plan["风控关注"]) if underlying_plan is not None else "未纳入回测",
+                "Overlay角色": role,
+                "观察建议": overlay_note,
+                "风险提示": risk_note,
+            }
+        )
+
+    summary_df = pd.DataFrame(rows)
+    if summary_df.empty:
+        return summary_df
+    summary_df["_market_sort"] = summary_df["期权代码"].map(lambda symbol: symbol_market_sort_key(symbol)[0])
+    return summary_df.sort_values(["_market_sort", "正股标的", "到期日", "期权代码"]).drop(columns=["_market_sort"]).reset_index(drop=True)
 
 
 def parse_symbols(text: str) -> list[str]:
@@ -587,10 +906,15 @@ with st.sidebar:
     )
     use_manual_positions = False
     current_positions = {}
+    use_account_capital = False
+    account_plan_capital = None
+    account_info = st.session_state.get("account_info")
     with st.expander("当前持仓（手动）", expanded=False):
         st.caption("可以手动录入，也可以从富途 OpenD 只读导入。导入持仓不会下单，也不会解锁交易。")
         if "positions_import_message" in st.session_state:
             st.success(st.session_state.pop("positions_import_message"))
+        if "account_import_message" in st.session_state:
+            st.success(st.session_state.pop("account_import_message"))
 
         import_col1, import_col2 = st.columns(2)
         position_futu_host = import_col1.text_input("持仓 OpenD 地址", value="127.0.0.1", key="position_futu_host")
@@ -615,14 +939,14 @@ with st.sidebar:
             key="position_env_label",
         )
         position_acc_id_text = st.text_input("账户 ID（可选）", placeholder="不填则使用 OpenD 默认账户")
+        position_market = {
+            "美股 US": "US",
+            "港股 HK": "HK",
+            "A股 CN": "CN",
+            "新加坡 SG": "SG",
+        }[position_market_label]
+        position_env = "REAL" if position_env_label == "真实账户（只读）" else "SIMULATE"
         if st.button("从富途读取持仓", use_container_width=True):
-            position_market = {
-                "美股 US": "US",
-                "港股 HK": "HK",
-                "A股 CN": "CN",
-                "新加坡 SG": "SG",
-            }[position_market_label]
-            position_env = "REAL" if position_env_label == "真实账户（只读）" else "SIMULATE"
             try:
                 acc_id = int(position_acc_id_text.strip()) if position_acc_id_text.strip() else None
                 position_provider = FutuHistoricalDataProvider(
@@ -644,6 +968,42 @@ with st.sidebar:
             except Exception as exc:
                 st.error(f"富途持仓读取失败：{exc}")
 
+        if st.button("读取账户资金", use_container_width=True):
+            try:
+                acc_id = int(position_acc_id_text.strip()) if position_acc_id_text.strip() else None
+                account_provider = FutuHistoricalDataProvider(
+                    FutuDataConfig(host=position_futu_host, port=position_futu_port, cache_dir=ROOT / "data" / "cache")
+                )
+                st.session_state["account_info"] = account_provider.get_account_info(
+                    market=position_market,
+                    trd_env=position_env,
+                    acc_id=acc_id,
+                )
+                st.session_state["account_import_message"] = "已读取富途账户资金。"
+                st.rerun()
+            except ValueError:
+                st.error("账户 ID 必须是数字；不确定时可以留空。")
+            except Exception as exc:
+                st.error(f"富途资金读取失败：{exc}")
+
+        account_info = st.session_state.get("account_info")
+        if account_info:
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {"项目": "总资产", "金额": format_money(account_info.get("total_assets"))},
+                        {"项目": "现金", "金额": format_money(account_info.get("cash"))},
+                        {"项目": "购买力", "金额": format_money(account_info.get("buying_power"))},
+                    ]
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+            use_account_capital = st.checkbox("用账户资金估算策略计划", value=True)
+            if use_account_capital:
+                account_plan_capital = float(account_info.get("plan_capital") or 0.0)
+                st.caption(f"策略计划资金基准：{format_money(account_plan_capital)}。优先使用购买力，其次现金，再其次总资产。")
+
         use_manual_positions = st.checkbox("用当前持仓表生成观察清单和策略计划", value=False)
         saved_positions_df = load_current_positions()
         position_editor_df = build_position_editor_frame(selected_symbols, saved_positions_df)
@@ -653,12 +1013,34 @@ with st.sidebar:
             use_container_width=True,
             num_rows="dynamic",
             column_config={
+                "市场": st.column_config.TextColumn("市场"),
+                "类型": st.column_config.TextColumn("类型"),
+                "正股标的": st.column_config.TextColumn("正股标的"),
                 "标的": st.column_config.TextColumn("标的", help="例如 US.AMD、US.NVDA；裸代码会自动补 US."),
-                "持仓股数": st.column_config.NumberColumn("持仓股数", min_value=0.0, step=1.0, format="%.4f"),
+                "持仓股数": st.column_config.NumberColumn("持仓数量", help="正数为多头，负数为空头或卖出期权持仓。", step=1.0, format="%.4f"),
                 "成本价": st.column_config.NumberColumn("成本价", min_value=0.0, step=0.01, format="%.2f"),
             },
+            disabled=["市场", "类型", "正股标的"],
             key="current_positions_editor",
         )
+        position_symbols = get_position_symbols(edited_positions_df)
+        option_position_symbols = get_option_position_symbols(edited_positions_df)
+        if option_position_symbols:
+            st.caption(f"识别到 {len(option_position_symbols)} 个期权持仓：{', '.join(option_position_symbols)}。期权暂不加入正股趋势回测。")
+        missing_position_symbols = [symbol for symbol in position_symbols if symbol not in selected_symbols]
+        if missing_position_symbols:
+            st.warning(f"持仓中有 {len(missing_position_symbols)} 个标的尚未参与当前回测：{', '.join(missing_position_symbols)}")
+            add_pool_col1, add_pool_col2 = st.columns(2)
+            if add_pool_col1.button("加入股票池并参与回测", use_container_width=True):
+                updated_payload = add_symbols_to_payload(payload, missing_position_symbols, participate=False)
+                updated_payload["default_backtest_symbols"] = normalize_app_symbols([*selected_symbols, *missing_position_symbols])
+                st.session_state["config_payload"] = updated_payload
+                st.rerun()
+            if add_pool_col2.button("仅加入股票池", use_container_width=True):
+                st.session_state["config_payload"] = add_symbols_to_payload(payload, missing_position_symbols, participate=False)
+                st.rerun()
+        elif position_symbols:
+            st.caption("当前持仓标的已在本次回测选择范围内。")
         position_col1, position_col2 = st.columns(2)
         if position_col1.button("保存持仓", use_container_width=True):
             save_current_positions(edited_positions_df)
@@ -668,7 +1050,7 @@ with st.sidebar:
             st.rerun()
         if use_manual_positions:
             current_positions = build_current_positions_map(edited_positions_df)
-            st.caption(f"已启用手动持仓：{len(current_positions)} 个标的。")
+            st.caption(f"已启用当前持仓表：{len(current_positions)} 个标的。")
     default_period_label = next(
         (label for label, years in BACKTEST_PERIOD_OPTIONS.items() if years == float(payload.get("backtest_years", 2.0))),
         "2 年",
@@ -1093,7 +1475,7 @@ if not equity_df.empty:
         )
 
         st.subheader("策略计划明细")
-        strategy_plan_df = build_strategy_plan(watchlist_df, config)
+        strategy_plan_df = build_strategy_plan(watchlist_df, config, account_plan_capital)
         if strategy_plan_df.empty:
             st.info("当前没有可生成的策略计划。")
         else:
@@ -1103,25 +1485,71 @@ if not equity_df.empty:
             plan_col2.metric("建仓/加仓", int(action_counts.get("建仓", 0) + action_counts.get("加仓", 0)))
             plan_col3.metric("减仓/清仓", int(action_counts.get("减仓", 0) + action_counts.get("清仓", 0)))
             plan_col4.metric("继续观察", int(action_counts.get("等待触发", 0) + action_counts.get("等待", 0)))
+            capital_source = "富途账户资金" if account_plan_capital else "模拟初始资金"
+            capital_value = account_plan_capital if account_plan_capital else config.initial_capital
+            st.caption(f"当前计划资金基准：{capital_source} {format_money(capital_value)}。")
             st.caption("优先级按处理紧迫度排序：立即处理、降低风险、准备入场、顺势加仓、持仓跟踪、接近触发、观察等待。")
-            st.caption("参考交易金额：已触发动作显示当前执行参考；等待触发显示触发后的建仓参考；继续持仓则显示暂不交易。")
+            st.caption("参考交易金额：只显示当前已触发动作的执行参考；等待触发的预算写在金额说明中。")
+            st.caption("建议股数按当前收盘价估算；目标仓位差额为正代表增仓，为负代表减仓或清仓，未触发动作显示不调整。")
 
             display_strategy_plan_df = strategy_plan_df.drop(columns=["优先级排序"]).copy()
             display_strategy_plan_df["参考交易金额"] = display_strategy_plan_df["参考交易金额"].map(
                 lambda value: "暂不交易" if pd.isna(value) else f"${float(value):,.2f}"
+            )
+            display_strategy_plan_df["建议股数"] = display_strategy_plan_df["建议股数"].map(
+                lambda value: "暂不交易" if pd.isna(value) else f"{float(value):,.4f}"
+            )
+            display_strategy_plan_df["目标仓位差额"] = display_strategy_plan_df["目标仓位差额"].map(
+                lambda value: "不调整" if abs(float(value)) < 1e-9 else f"{'+' if float(value) > 0 else '-'}${abs(float(value)):,.2f}"
             )
             display_strategy_plan_df["收盘价"] = display_strategy_plan_df["收盘价"].map(lambda value: f"{value:.2f}")
             display_strategy_plan_df["距关键价位"] = display_strategy_plan_df["距关键价位"].map(
                 lambda value: f"{value * 100:+.2f}%"
             )
             st.dataframe(display_strategy_plan_df, use_container_width=True, hide_index=True)
+            strategy_plan_export_df = build_strategy_plan_export_frame(
+                strategy_plan_df,
+                config=config,
+                data_source=data_source,
+                equity_df=equity_df,
+                capital_source=capital_source,
+                capital_value=float(capital_value),
+                position_source="当前持仓表" if current_positions else "回测模拟",
+                app_version=APP_VERSION,
+                account_info=account_info,
+            )
             st.download_button(
                 "下载策略计划明细 CSV",
-                data=dataframe_to_csv_bytes(strategy_plan_df.drop(columns=["优先级排序"])),
+                data=dataframe_to_csv_bytes(strategy_plan_export_df),
                 file_name="strategy_action_plan.csv",
                 mime="text/csv",
                 use_container_width=True,
             )
+
+            option_overlay_df = build_option_overlay_summary(edited_positions_df, strategy_plan_df)
+            if not option_overlay_df.empty:
+                st.subheader("期权持仓关联")
+                st.caption("这是期权持仓和正股策略计划的轻量关联视图；当前只做参考展示，不参与正股趋势回测，也不生成下单建议。")
+                display_option_overlay_df = option_overlay_df.copy()
+                display_option_overlay_df["到期天数"] = display_option_overlay_df["到期天数"].map(
+                    lambda value: "" if pd.isna(value) else f"{int(value)} 天"
+                )
+                display_option_overlay_df["行权价"] = display_option_overlay_df["行权价"].map(lambda value: f"{float(value):,.2f}")
+                display_option_overlay_df["持仓数量"] = display_option_overlay_df["持仓数量"].map(lambda value: f"{value:,.4f}")
+                display_option_overlay_df["合约对应股数"] = display_option_overlay_df["合约对应股数"].map(lambda value: f"{value:,.2f}")
+                display_option_overlay_df["正股持仓股数"] = display_option_overlay_df["正股持仓股数"].map(lambda value: f"{value:,.4f}")
+                display_option_overlay_df["覆盖/保护比例"] = display_option_overlay_df["覆盖/保护比例"].map(
+                    lambda value: "" if pd.isna(value) else f"{float(value) * 100:.1f}%"
+                )
+                display_option_overlay_df["成本价"] = display_option_overlay_df["成本价"].map(lambda value: f"{value:.2f}")
+                st.dataframe(display_option_overlay_df, use_container_width=True, hide_index=True)
+                st.download_button(
+                    "下载期权持仓关联 CSV",
+                    data=dataframe_to_csv_bytes(option_overlay_df),
+                    file_name="option_overlay_summary.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
 
 st.subheader("单标的价格与仓位")
 chart_symbol = st.selectbox("查看标的", options=config.default_backtest_symbols)
