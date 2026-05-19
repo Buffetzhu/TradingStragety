@@ -3,7 +3,7 @@
   "default_pool": ["AMD", "INTC", "MU", "NVDA", "SNDK", "SOXX", "SMH"],
   "default_backtest_symbols": ["AMD", "INTC", "MU", "NVDA", "SOXX"],
   "start_date": "2022-01-01",
-  "backtest_years": 2.0,
+  "backtest_years": 0.5,
   "indicator_warmup_days": 120,
   "ma_short": 20,
   "ma_long": 50,

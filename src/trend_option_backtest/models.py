@@ -12,7 +12,7 @@ class StrategyConfig:
     default_pool: list[str]
     default_backtest_symbols: list[str]
     start_date: str
-    backtest_years: float = 2.0
+    backtest_years: float = 0.5
     indicator_warmup_days: int = 120
     ma_short: int = 20
     ma_long: int = 50
@@ -38,7 +38,7 @@ class StrategyConfig:
             default_pool=list(payload["default_pool"]),
             default_backtest_symbols=list(payload["default_backtest_symbols"]),
             start_date=str(payload["start_date"]),
-            backtest_years=float(payload.get("backtest_years", 2.0)),
+            backtest_years=float(payload.get("backtest_years", 0.5)),
             indicator_warmup_days=int(payload.get("indicator_warmup_days", 120)),
             ma_short=int(payload.get("ma_short", 20)),
             ma_long=int(payload.get("ma_long", 50)),
