@@ -1,0 +1,14 @@
+# Streamlit 主题：温和深色蓝 + 琥珀强调，避免默认红绿过饱和。
+[theme]
+base = "light"
+primaryColor = "#2563EB"           # 主操作按钮：科技蓝
+backgroundColor = "#F7F8FA"        # 页面底色：极浅灰，比纯白更稳重
+secondaryBackgroundColor = "#FFFFFF"  # 侧栏 / expander 内部
+textColor = "#0F172A"              # 深灰蓝，比纯黑柔和
+font = "sans serif"
+
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false

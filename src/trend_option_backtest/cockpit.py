@@ -45,12 +45,53 @@ def _is_option_attention(row: pd.Series, expiry_days_threshold: int) -> bool:
     return False
 
 
+def _extract_combo_contracts(option_combo_df: pd.DataFrame | None) -> set[str]:
+    if option_combo_df is None or option_combo_df.empty or "涉及合约" not in option_combo_df.columns:
+        return set()
+    contracts: set[str] = set()
+    for value in option_combo_df["涉及合约"].dropna().map(str):
+        contracts.update(contract.strip() for contract in value.split("、") if contract.strip())
+    return contracts
+
+
+def _days_until_expiry(expiry: object, current_date: pd.Timestamp) -> int | None:
+    expiry_date = pd.to_datetime(expiry, errors="coerce")
+    if pd.isna(expiry_date):
+        return None
+    return int((expiry_date.normalize() - current_date.normalize()).days)
+
+
+def _parse_strike_range(value: object) -> tuple[float, float] | None:
+    parts = [part.strip().replace(",", "") for part in str(value).split("-")]
+    if len(parts) != 2:
+        return None
+    try:
+        low = float(parts[0])
+        high = float(parts[1])
+    except ValueError:
+        return None
+    return (low, high) if low <= high else (high, low)
+
+
+def _estimate_vertical_spread_risk(row: pd.Series) -> float:
+    combo_type = str(row.get("组合类型", ""))
+    if "Spread" not in combo_type:
+        return 0.0
+    strike_range = _parse_strike_range(row.get("行权价区间", ""))
+    if strike_range is None:
+        return 0.0
+    contracts = pd.to_numeric(pd.Series([row.get("合约张数", 0.0)]), errors="coerce").fillna(0.0).iloc[0]
+    return float(strike_range[1] - strike_range[0]) * float(contracts) * 100.0
+
+
 def build_cockpit_overview(
     strategy_plan_df: pd.DataFrame,
     option_overlay_df: pd.DataFrame,
+    option_combo_df: pd.DataFrame | None = None,
     *,
     near_trigger_threshold: float = 0.03,
     option_expiry_days_threshold: int = 30,
+    current_date: pd.Timestamp | None = None,
 ) -> tuple[dict[str, int], pd.DataFrame]:
     metrics = {
         "当前动作": 0,
@@ -92,15 +133,37 @@ def build_cockpit_overview(
                     }
                 )
 
+    base_date = current_date or pd.Timestamp.today()
+    combo_contracts = _extract_combo_contracts(option_combo_df)
+    if option_combo_df is not None and not option_combo_df.empty:
+        for _, row in option_combo_df.iterrows():
+            days_to_expiry = _days_until_expiry(row.get("到期日", ""), base_date)
+            if days_to_expiry is not None and days_to_expiry > option_expiry_days_threshold:
+                continue
+            metrics["期权关注"] += 1
+            task_rows.append(
+                {
+                    "类别": "期权关注",
+                    "标的": str(row.get("正股标的", "")),
+                    "动作": f"{row.get('组合类型', '')} / {row.get('组合方向', '')}",
+                    "优先级": "组合复核",
+                    "依据": str(row.get("风险提示", "")),
+                    "资金/仓位": f"{row.get('期权腿数', '')} 腿 / {row.get('合约张数', '')} 张",
+                }
+            )
+
     if not option_overlay_df.empty:
         for _, row in option_overlay_df.iterrows():
+            option_code = str(row.get("期权代码", ""))
+            if option_code in combo_contracts:
+                continue
             if not _is_option_attention(row, option_expiry_days_threshold):
                 continue
             metrics["期权关注"] += 1
             task_rows.append(
                 {
                     "类别": "期权关注",
-                    "标的": str(row.get("期权代码", "")),
+                    "标的": option_code,
                     "动作": str(row.get("Overlay角色", "")),
                     "优先级": str(row.get("正股优先级", "")),
                     "依据": str(row.get("风险提示", "")),
@@ -119,9 +182,11 @@ def build_cockpit_overview(
 def build_cockpit_sections(
     strategy_plan_df: pd.DataFrame,
     option_overlay_df: pd.DataFrame,
+    option_combo_df: pd.DataFrame | None = None,
     *,
     risk_distance_threshold: float = 0.05,
     option_expiry_days_threshold: int = 30,
+    current_date: pd.Timestamp | None = None,
 ) -> dict[str, pd.DataFrame]:
     risk_rows: list[dict[str, object]] = []
     capital_rows: list[dict[str, object]] = []
@@ -176,32 +241,62 @@ def build_cockpit_sections(
                 }
             )
 
+    base_date = current_date or pd.Timestamp.today()
+    combo_contracts = _extract_combo_contracts(option_combo_df)
+    if option_combo_df is not None and not option_combo_df.empty:
+        for _, row in option_combo_df.iterrows():
+            days_to_expiry = _days_until_expiry(row.get("到期日", ""), base_date)
+            if days_to_expiry is not None and days_to_expiry > option_expiry_days_threshold:
+                continue
+            expiry_rows.append(
+                {
+                    "显示口径": "组合",
+                    "期权结构": f"{row.get('组合类型', '')} / {row.get('组合方向', '')}",
+                    "正股标的": str(row.get("正股标的", "")),
+                    "到期日": str(row.get("到期日", "")),
+                    "到期天数": "" if days_to_expiry is None else days_to_expiry,
+                    "期权代码": "",
+                    "涉及合约": str(row.get("涉及合约", "")),
+                    "腿数/张数": f"{row.get('期权腿数', '')} 腿 / {row.get('合约张数', '')} 张",
+                    "行权价区间": str(row.get("行权价区间", "")),
+                    "风险提示": str(row.get("风险提示", "")),
+                }
+            )
+
     if not option_overlay_df.empty:
         for _, row in option_overlay_df.iterrows():
+            option_code = str(row.get("期权代码", ""))
+            if option_code in combo_contracts:
+                continue
             days_to_expiry = row.get("到期天数")
             if days_to_expiry is None or pd.isna(days_to_expiry) or int(days_to_expiry) > option_expiry_days_threshold:
                 continue
             expiry_rows.append(
                 {
-                    "期权代码": str(row.get("期权代码", "")),
+                    "显示口径": "单腿",
+                    "期权结构": str(row.get("Overlay角色", "")),
                     "正股标的": str(row.get("正股标的", "")),
+                    "到期日": str(row.get("到期日", "")),
                     "到期天数": int(days_to_expiry),
-                    "Overlay角色": str(row.get("Overlay角色", "")),
-                    "覆盖口径": str(row.get("覆盖口径", "")),
+                    "期权代码": option_code,
+                    "涉及合约": option_code,
+                    "腿数/张数": "1 腿",
+                    "行权价区间": "" if pd.isna(row.get("行权价", None)) else f"{float(row.get('行权价')):,.2f}",
                     "风险提示": str(row.get("风险提示", "")),
                 }
             )
 
     risk_df = pd.DataFrame(risk_rows, columns=["标的", "风险等级", "计划动作", "距关键价位", "风控关注", "下一步"])
     capital_df = pd.DataFrame(capital_rows, columns=["动作", "标的数", "参考金额合计"])
-    expiry_df = pd.DataFrame(expiry_rows, columns=["期权代码", "正股标的", "到期天数", "Overlay角色", "覆盖口径", "风险提示"])
+    expiry_df = pd.DataFrame(expiry_rows, columns=["显示口径", "期权结构", "正股标的", "到期日", "到期天数", "期权代码", "涉及合约", "腿数/张数", "行权价区间", "风险提示"])
     observe_df = pd.DataFrame(observe_rows, columns=["标的", "状态", "计划动作", "距关键价位", "下一步关注"])
     if not risk_df.empty:
         risk_rank = {"高": 1, "中": 2, "观察": 3}
         risk_df["_rank"] = risk_df["风险等级"].map(lambda value: risk_rank.get(str(value), 9))
         risk_df = risk_df.sort_values(["_rank", "标的"]).drop(columns=["_rank"]).reset_index(drop=True)
     if not expiry_df.empty:
-        expiry_df = expiry_df.sort_values(["到期天数", "期权代码"]).reset_index(drop=True)
+        expiry_df["_rank"] = expiry_df["显示口径"].map(lambda value: 1 if str(value) == "组合" else 2)
+        expiry_df = expiry_df.sort_values(["到期天数", "_rank", "正股标的", "期权结构"]).drop(columns=["_rank"]).reset_index(drop=True)
     if not observe_df.empty:
         observe_df = observe_df.sort_values(["状态", "标的"]).reset_index(drop=True)
     return {
@@ -251,6 +346,7 @@ def build_cockpit_snapshot_row(
 def build_cockpit_risk_budget(
     strategy_plan_df: pd.DataFrame,
     option_overlay_df: pd.DataFrame,
+    option_combo_df: pd.DataFrame | None = None,
     *,
     capital_value: float,
 ) -> dict[str, float]:
@@ -268,8 +364,16 @@ def build_cockpit_risk_budget(
 
     potential_assignment = 0.0
     uncovered_short_call_count = 0.0
+    combo_spread_risk = 0.0
+    combo_contracts = _extract_combo_contracts(option_combo_df)
+    if option_combo_df is not None and not option_combo_df.empty:
+        for _, row in option_combo_df.iterrows():
+            combo_spread_risk += _estimate_vertical_spread_risk(row)
     if not option_overlay_df.empty:
         for _, row in option_overlay_df.iterrows():
+            option_code = str(row.get("期权代码", ""))
+            if option_code in combo_contracts:
+                continue
             option_type = str(row.get("期权类型", ""))
             direction = str(row.get("持仓方向", ""))
             contract_shares = row.get("合约对应股数", 0.0)
@@ -291,8 +395,95 @@ def build_cockpit_risk_budget(
         "净风险变化": net_change,
         "今日动作资金占比": gross_action_amount / capital_base if capital_base else 0.0,
         "潜在接股金额": potential_assignment,
+        "组合价差风险金额": combo_spread_risk,
         "未充分备兑Call数": uncovered_short_call_count,
     }
+
+
+def build_cockpit_risk_budget_detail(
+    strategy_plan_df: pd.DataFrame,
+    option_overlay_df: pd.DataFrame,
+    option_combo_df: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    columns = ["类别", "标的/结构", "动作/口径", "参考金额", "涉及合约", "说明"]
+    rows: list[dict[str, object]] = []
+
+    if not strategy_plan_df.empty:
+        for _, row in strategy_plan_df.iterrows():
+            if not _is_triggered_action(row):
+                continue
+            action = str(row.get("计划动作", ""))
+            category = "增风险" if action in {"建仓", "加仓"} else "降风险"
+            rows.append(
+                {
+                    "类别": category,
+                    "标的/结构": str(row.get("标的", "")),
+                    "动作/口径": action,
+                    "参考金额": float(row.get("参考交易金额", 0.0) or 0.0),
+                    "涉及合约": "",
+                    "说明": str(row.get("触发依据", row.get("计划说明", ""))),
+                }
+            )
+
+    combo_contracts = _extract_combo_contracts(option_combo_df)
+    if option_combo_df is not None and not option_combo_df.empty:
+        for _, row in option_combo_df.iterrows():
+            spread_risk = _estimate_vertical_spread_risk(row)
+            if spread_risk <= 0:
+                continue
+            rows.append(
+                {
+                    "类别": "组合价差风险",
+                    "标的/结构": str(row.get("正股标的", "")),
+                    "动作/口径": f"{row.get('组合类型', '')} / {row.get('组合方向', '')}",
+                    "参考金额": spread_risk,
+                    "涉及合约": str(row.get("涉及合约", "")),
+                    "说明": "按行权价宽度 x 合约张数 x 100 估算；未扣除已收/已付权利金。",
+                }
+            )
+
+    if not option_overlay_df.empty:
+        for _, row in option_overlay_df.iterrows():
+            option_code = str(row.get("期权代码", ""))
+            if option_code in combo_contracts:
+                continue
+            option_type = str(row.get("期权类型", ""))
+            direction = str(row.get("持仓方向", ""))
+            contract_shares = float(row.get("合约对应股数", 0.0) or 0.0)
+            strike = float(row.get("行权价", 0.0) or 0.0)
+            if option_type == "Put" and direction == "空头":
+                rows.append(
+                    {
+                        "类别": "潜在接股",
+                        "标的/结构": str(row.get("正股标的", "")),
+                        "动作/口径": "未归入组合的空头 Put",
+                        "参考金额": contract_shares * strike,
+                        "涉及合约": option_code,
+                        "说明": str(row.get("覆盖口径", "")),
+                    }
+                )
+            coverage_label = str(row.get("覆盖口径", ""))
+            coverage_ratio = row.get("覆盖/保护比例")
+            if option_type == "Call" and direction == "空头" and coverage_label == "备兑覆盖比例":
+                if coverage_ratio is None or pd.isna(coverage_ratio) or float(coverage_ratio) < 1:
+                    ratio_text = "" if coverage_ratio is None or pd.isna(coverage_ratio) else f"覆盖比例 {float(coverage_ratio):.2f}"
+                    rows.append(
+                        {
+                            "类别": "未充分备兑Call",
+                            "标的/结构": str(row.get("正股标的", "")),
+                            "动作/口径": "未归入组合的空头 Call",
+                            "参考金额": None,
+                            "涉及合约": option_code,
+                            "说明": ratio_text or coverage_label,
+                        }
+                    )
+
+    detail_df = pd.DataFrame(rows, columns=columns)
+    if detail_df.empty:
+        return detail_df
+    category_rank = {"降风险": 1, "增风险": 2, "组合价差风险": 3, "潜在接股": 4, "未充分备兑Call": 5}
+    detail_df["_rank"] = detail_df["类别"].map(lambda value: category_rank.get(str(value), 9))
+    return detail_df.sort_values(["_rank", "标的/结构", "动作/口径"]).drop(columns=["_rank"]).reset_index(drop=True)
 
 
 def build_review_trend(reviews_df: pd.DataFrame) -> pd.DataFrame:
@@ -350,6 +541,84 @@ def build_weekly_review_summary(reviews_df: pd.DataFrame) -> pd.DataFrame:
         .reset_index(drop=True)
     )
     return summary_df[["周开始", "周结束", "复盘天数", "任务数", "已处理", "未完成", "平均完成率", "净风险变化"]]
+
+
+def build_regression_check_frame(
+    check_items: list[str],
+    *,
+    data_source: str,
+    position_count: int,
+    stock_count: int,
+    option_count: int,
+    has_account_info: bool,
+    has_last_backtest: bool,
+    strategy_plan_count: int,
+    cockpit_task_count: int,
+    option_combo_count: int,
+) -> pd.DataFrame:
+    rows: list[dict[str, str]] = []
+    for item in check_items:
+        result = "未检查"
+        note = ""
+        if item == "OpenD 连接正常":
+            if data_source == "富途真实行情" and (position_count > 0 or has_account_info or has_last_backtest):
+                result = "通过"
+                note = "当前页面已有富途只读数据或真实行情回测结果。"
+            elif data_source == "富途真实行情":
+                note = "请先测试 OpenD 连接、读取持仓/资金，或运行真实行情回测。"
+            else:
+                note = "当前使用演示数据，未验证 OpenD。"
+        elif item == "持仓读取正常":
+            if position_count > 0:
+                result = "通过"
+                note = f"当前持仓表有 {position_count} 条非零记录。"
+            else:
+                note = "当前没有非零持仓记录。"
+        elif item == "账户资金读取正常":
+            if has_account_info:
+                result = "通过"
+                note = "当前页面已读取账户资金。"
+            else:
+                note = "当前页面还没有账户资金。"
+        elif item == "股票和期权隔离正确":
+            if position_count > 0:
+                result = "通过"
+                note = f"当前识别正股/ETF {stock_count} 个，期权 {option_count} 个。"
+            else:
+                note = "需要先读取或录入持仓后确认隔离结果。"
+        elif item == "期权组合识别合理":
+            if option_count > 0:
+                result = "需复核"
+                note = f"当前有 {option_count} 个期权持仓，识别出 {option_combo_count} 个多腿组合。"
+            else:
+                note = "当前没有期权持仓。"
+        elif item == "默认回测可完成":
+            if has_last_backtest:
+                result = "通过"
+                note = "当前会话已有回测结果。"
+            else:
+                note = "请先运行默认回测或当前参数回测。"
+        elif item == "策略计划动作合理":
+            if strategy_plan_count > 0:
+                result = "需复核"
+                note = f"已生成 {strategy_plan_count} 条行动计划，请人工确认动作、金额和触发依据。"
+            else:
+                note = "运行回测后再检查行动计划。"
+        elif item == "Cockpit 风险预算方向正确":
+            if strategy_plan_count > 0:
+                result = "需复核"
+                note = "已生成 Cockpit，请人工确认增风险、降风险和净风险变化。"
+            else:
+                note = "运行回测后再检查风险预算。"
+        elif item == "任务状态和备注可保存":
+            if cockpit_task_count > 0:
+                note = f"当前有 {cockpit_task_count} 条 Cockpit 任务，可编辑状态和备注后保存复盘验证。"
+            else:
+                note = "当前没有 Cockpit 任务；可在有任务时验证状态保存。"
+        elif item == "今日复盘和周度摘要可更新":
+            note = "保存今日复盘后再确认趋势和周度摘要是否更新。"
+        rows.append({"检查项": item, "结果": result, "备注": note})
+    return pd.DataFrame(rows, columns=["检查项", "结果", "备注"])
 
 
 def build_regression_check_rows(

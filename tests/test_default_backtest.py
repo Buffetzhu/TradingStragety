@@ -15,14 +15,17 @@ from trend_option_backtest.backtest import BacktestEngine
 from trend_option_backtest.cockpit import (
     build_cockpit_overview,
     build_cockpit_risk_budget,
+    build_cockpit_risk_budget_detail,
     build_cockpit_sections,
     build_cockpit_snapshot_row,
+    build_regression_check_frame,
     build_regression_check_rows,
     build_regression_check_summary,
     build_review_trend,
     build_weekly_review_summary,
 )
 from trend_option_backtest.exporting import build_strategy_plan_export_frame
+from trend_option_backtest.history import build_template_history_summary, filter_history_by_templates, normalize_backtest_history_frame
 from trend_option_backtest.models import StrategyConfig
 from trend_option_backtest.planning import (
     build_option_combo_summary,
@@ -34,6 +37,7 @@ from trend_option_backtest.planning import (
 )
 from trend_option_backtest.providers.futu_provider import FutuDataConfig, FutuHistoricalDataProvider, normalize_symbol
 from trend_option_backtest.services.backtest_service import BacktestService
+from trend_option_backtest.strategy_templates import STRATEGY_TEMPLATES, apply_strategy_template, build_template_diff_rows, get_template_label
 
 
 class FakeFutuTradeContext:
@@ -107,6 +111,57 @@ def test_default_demo_backtest_runs():
         if first_trade["action"] == "买入":
             symbol_capital = config.initial_capital / len(config.default_backtest_symbols)
             assert first_trade["amount"] <= symbol_capital * config.entry_position_pct + 1e-9
+
+
+def test_strategy_templates_apply_parameter_overrides_without_losing_pool():
+    payload = StrategyConfig.from_json(ROOT / "config" / "default_config.json").to_dict()
+    payload["default_pool"] = [*payload["default_pool"], "TSLA"]
+    payload["default_backtest_symbols"] = ["AMD", "TSLA"]
+
+    updated = apply_strategy_template(payload, "steady_trend")
+
+    assert len(STRATEGY_TEMPLATES) == 4
+    assert updated["strategy_name"] == "Steady_Trend_v1"
+    assert updated["ma_short"] == 30
+    assert updated["ma_long"] == 80
+    assert updated["entry_position_pct"] == 0.35
+    assert updated["default_pool"] == payload["default_pool"]
+    assert updated["default_backtest_symbols"] == payload["default_backtest_symbols"]
+    assert get_template_label(updated) == "稳健趋势"
+
+
+def test_strategy_template_diff_rows_show_only_changed_values():
+    payload = StrategyConfig.from_json(ROOT / "config" / "default_config.json").to_dict()
+    diff_rows = build_template_diff_rows(payload, "aggressive_breakout")
+    diff_by_param = {row["参数"]: row for row in diff_rows}
+
+    assert diff_by_param["MA 短周期"] == {"参数": "MA 短周期", "当前值": "20", "模板值": "10"}
+    assert diff_by_param["首次建仓比例"] == {"参数": "首次建仓比例", "当前值": "50%", "模板值": "60%"}
+    assert diff_by_param["SOXX 板块共振过滤"] == {"参数": "SOXX 板块共振过滤", "当前值": "启用", "模板值": "关闭"}
+
+    updated = apply_strategy_template(payload, "aggressive_breakout")
+    assert build_template_diff_rows(updated, "aggressive_breakout") == []
+
+
+def test_template_history_summary_groups_runs_and_handles_legacy_rows():
+    history_rows = [
+        {"运行时间": "2026-05-20 09:30:00", "策略模板": "Steady_Trend_v1", "总收益率": 0.10, "最大回撤": -0.08, "Sharpe": 1.2, "交易动作": 4},
+        {"运行时间": "2026-05-20 10:30:00", "策略模板": "Steady_Trend_v1", "总收益率": 0.20, "最大回撤": -0.12, "Sharpe": 1.6, "交易动作": 6},
+        {"运行时间": "2026-05-20 11:30:00", "总收益率": 0.05, "最大回撤": -0.04, "Sharpe": 0.8, "交易动作": 2},
+    ]
+
+    normalized_df = normalize_backtest_history_frame(history_rows)
+    summary_df = build_template_history_summary(history_rows)
+    filtered_df = filter_history_by_templates(history_rows, ["Steady_Trend_v1"])
+
+    assert normalized_df["策略模板"].tolist() == ["Steady_Trend_v1", "Steady_Trend_v1", "未记录模板"]
+    steady_row = summary_df[summary_df["策略模板"] == "Steady_Trend_v1"].iloc[0]
+    assert steady_row["回测次数"] == 2
+    assert steady_row["平均收益率"] == pytest.approx(0.15)
+    assert steady_row["最好收益率"] == 0.20
+    assert steady_row["最差回撤"] == -0.12
+    assert steady_row["平均Sharpe"] == pytest.approx(1.4)
+    assert filtered_df["策略模板"].tolist() == ["Steady_Trend_v1", "Steady_Trend_v1"]
 
 
 def test_demo_backtest_supports_manual_symbol():
@@ -599,6 +654,58 @@ def test_cockpit_overview_prioritizes_actions_and_option_attention():
     assert tasks_df.loc[1, "动作"] == "卖出 Call 风险敞口"
 
 
+def test_cockpit_overview_prefers_option_combo_over_single_legs():
+    option_overlay_df = pd.DataFrame(
+        [
+            {
+                "市场": "美股",
+                "期权代码": "US.AMD260605P120000",
+                "正股标的": "US.AMD",
+                "期权类型": "Put",
+                "到期日": "2026-06-05",
+                "到期天数": 17,
+                "行权价": 120.0,
+                "持仓方向": "空头",
+                "持仓数量": -1.0,
+                "合约对应股数": 100.0,
+                "Overlay角色": "卖出 Put 风险敞口",
+                "正股优先级": "降低风险",
+                "覆盖口径": "潜在接股比例",
+                "风险提示": "高行权价 Put 需要关注接股风险。",
+            },
+            {
+                "市场": "美股",
+                "期权代码": "US.AMD260605P100000",
+                "正股标的": "US.AMD",
+                "期权类型": "Put",
+                "到期日": "2026-06-05",
+                "到期天数": 17,
+                "行权价": 100.0,
+                "持仓方向": "多头",
+                "持仓数量": 1.0,
+                "合约对应股数": 100.0,
+                "Overlay角色": "保护性 Put",
+                "正股优先级": "降低风险",
+                "覆盖口径": "保护比例",
+                "风险提示": "低行权价 Put 提供有限保护。",
+            },
+        ]
+    )
+    option_combo_df = build_option_combo_summary(option_overlay_df)
+
+    metrics, tasks_df = build_cockpit_overview(
+        pd.DataFrame(),
+        option_overlay_df,
+        option_combo_df,
+        current_date=pd.Timestamp("2026-05-19"),
+    )
+
+    assert metrics["期权关注"] == 1
+    assert tasks_df["标的"].tolist() == ["US.AMD"]
+    assert tasks_df.loc[0, "动作"] == "Bull Put Spread / 偏多/收权利金价差"
+    assert tasks_df.loc[0, "优先级"] == "组合复核"
+
+
 def test_cockpit_sections_build_risk_expiry_and_capital_views():
     strategy_plan_df = pd.DataFrame(
         [
@@ -680,6 +787,72 @@ def test_cockpit_sections_build_risk_expiry_and_capital_views():
             "下一步关注": "等待突破过去 20 日前高",
         }
     ]
+
+
+def test_cockpit_option_expiry_prefers_combo_view_over_legs():
+    option_overlay_df = pd.DataFrame(
+        [
+            {
+                "市场": "美股",
+                "期权代码": "US.AMD260605P120000",
+                "正股标的": "US.AMD",
+                "期权类型": "Put",
+                "到期日": "2026-06-05",
+                "到期天数": 17,
+                "行权价": 120.0,
+                "持仓方向": "空头",
+                "持仓数量": -1.0,
+                "Overlay角色": "卖出 Put 风险敞口",
+                "覆盖口径": "潜在接股比例",
+                "风险提示": "高行权价 Put 需要关注接股风险。",
+            },
+            {
+                "市场": "美股",
+                "期权代码": "US.AMD260605P100000",
+                "正股标的": "US.AMD",
+                "期权类型": "Put",
+                "到期日": "2026-06-05",
+                "到期天数": 17,
+                "行权价": 100.0,
+                "持仓方向": "多头",
+                "持仓数量": 1.0,
+                "Overlay角色": "保护性 Put",
+                "覆盖口径": "保护比例",
+                "风险提示": "低行权价 Put 提供有限保护。",
+            },
+            {
+                "市场": "美股",
+                "期权代码": "US.INTC260605C35000",
+                "正股标的": "US.INTC",
+                "期权类型": "Call",
+                "到期日": "2026-06-05",
+                "到期天数": 17,
+                "行权价": 35.0,
+                "持仓方向": "多头",
+                "持仓数量": 1.0,
+                "Overlay角色": "进攻性 Call",
+                "覆盖口径": "上行杠杆敞口比例",
+                "风险提示": "到期前若趋势未恢复，权利金可能损耗。",
+            },
+        ]
+    )
+    option_combo_df = build_option_combo_summary(option_overlay_df)
+
+    sections = build_cockpit_sections(
+        pd.DataFrame(),
+        option_overlay_df,
+        option_combo_df,
+        current_date=pd.Timestamp("2026-05-19"),
+    )
+    expiry_df = sections["option_expiry"]
+    combo_rows = expiry_df[expiry_df["显示口径"] == "组合"]
+    single_rows = expiry_df[expiry_df["显示口径"] == "单腿"]
+
+    assert expiry_df["显示口径"].tolist() == ["组合", "单腿"]
+    assert combo_rows.iloc[0]["正股标的"] == "US.AMD"
+    assert combo_rows.iloc[0]["期权结构"] == "Bull Put Spread / 偏多/收权利金价差"
+    assert "US.AMD260605P120000" in combo_rows.iloc[0]["涉及合约"]
+    assert single_rows["期权代码"].tolist() == ["US.INTC260605C35000"]
 
 
 def test_cockpit_snapshot_row_summarizes_sections():
@@ -766,8 +939,114 @@ def test_cockpit_risk_budget_summarizes_stock_and_option_exposure():
         "净风险变化": 1700.0,
         "今日动作资金占比": 0.033,
         "潜在接股金额": 10000.0,
+        "组合价差风险金额": 0.0,
         "未充分备兑Call数": 1.0,
     }
+
+
+def test_cockpit_risk_budget_excludes_combo_legs_and_tracks_spread_risk():
+    option_overlay_df = pd.DataFrame(
+        [
+            {
+                "市场": "美股",
+                "期权代码": "US.AMD260605P120000",
+                "正股标的": "US.AMD",
+                "期权类型": "Put",
+                "到期日": "2026-06-05",
+                "到期天数": 17,
+                "行权价": 120.0,
+                "持仓方向": "空头",
+                "持仓数量": -1.0,
+                "合约对应股数": 100.0,
+                "覆盖口径": "潜在接股比例",
+                "覆盖/保护比例": None,
+            },
+            {
+                "市场": "美股",
+                "期权代码": "US.AMD260605P100000",
+                "正股标的": "US.AMD",
+                "期权类型": "Put",
+                "到期日": "2026-06-05",
+                "到期天数": 17,
+                "行权价": 100.0,
+                "持仓方向": "多头",
+                "持仓数量": 1.0,
+                "合约对应股数": 100.0,
+                "覆盖口径": "保护比例",
+                "覆盖/保护比例": None,
+            },
+        ]
+    )
+    option_combo_df = build_option_combo_summary(option_overlay_df)
+
+    budget = build_cockpit_risk_budget(pd.DataFrame(), option_overlay_df, option_combo_df, capital_value=100000.0)
+
+    assert budget["潜在接股金额"] == 0.0
+    assert budget["组合价差风险金额"] == 2000.0
+
+
+def test_cockpit_risk_budget_detail_tracks_sources_without_duplicate_combo_legs():
+    strategy_plan_df = pd.DataFrame(
+        [
+            {"标的": "US.AMD", "计划动作": "减仓", "参考交易金额": 800.0, "触发依据": "过热减仓"},
+            {"标的": "US.MSFT", "计划动作": "建仓", "参考交易金额": 1200.0, "触发依据": "突破建仓"},
+        ]
+    )
+    option_overlay_df = pd.DataFrame(
+        [
+            {
+                "市场": "美股",
+                "期权代码": "US.AMD260605P120000",
+                "正股标的": "US.AMD",
+                "期权类型": "Put",
+                "到期日": "2026-06-05",
+                "到期天数": 17,
+                "行权价": 120.0,
+                "持仓方向": "空头",
+                "持仓数量": -1.0,
+                "合约对应股数": 100.0,
+                "覆盖口径": "潜在接股比例",
+                "覆盖/保护比例": None,
+            },
+            {
+                "市场": "美股",
+                "期权代码": "US.AMD260605P100000",
+                "正股标的": "US.AMD",
+                "期权类型": "Put",
+                "到期日": "2026-06-05",
+                "到期天数": 17,
+                "行权价": 100.0,
+                "持仓方向": "多头",
+                "持仓数量": 1.0,
+                "合约对应股数": 100.0,
+                "覆盖口径": "保护比例",
+                "覆盖/保护比例": None,
+            },
+            {
+                "市场": "美股",
+                "期权代码": "US.INTC260605P30000",
+                "正股标的": "US.INTC",
+                "期权类型": "Put",
+                "到期日": "2026-06-05",
+                "到期天数": 17,
+                "行权价": 30.0,
+                "持仓方向": "空头",
+                "持仓数量": -1.0,
+                "合约对应股数": 100.0,
+                "覆盖口径": "无正股，需用现金或购买力覆盖潜在接股",
+                "覆盖/保护比例": None,
+            },
+        ]
+    )
+    option_combo_df = build_option_combo_summary(option_overlay_df)
+
+    detail_df = build_cockpit_risk_budget_detail(strategy_plan_df, option_overlay_df, option_combo_df)
+    records = detail_df.to_dict("records")
+
+    assert [row["类别"] for row in records] == ["降风险", "增风险", "组合价差风险", "潜在接股"]
+    assert detail_df[detail_df["类别"] == "组合价差风险"].iloc[0]["参考金额"] == 2000.0
+    assert detail_df[detail_df["类别"] == "潜在接股"].iloc[0]["涉及合约"] == "US.INTC260605P30000"
+    assert "US.AMD260605P120000" not in detail_df[detail_df["类别"] == "潜在接股"]["涉及合约"].tolist()
 
 
 def test_review_trend_uses_latest_review_per_day():
@@ -853,3 +1132,42 @@ def test_regression_check_rows_and_summary_use_latest_batch():
         "未检查": 0,
         "通过率": 1.0,
     }
+
+
+def test_regression_check_frame_prefills_from_current_page_state():
+    frame = build_regression_check_frame(
+        [
+            "OpenD 连接正常",
+            "持仓读取正常",
+            "账户资金读取正常",
+            "股票和期权隔离正确",
+            "期权组合识别合理",
+            "默认回测可完成",
+            "策略计划动作合理",
+            "Cockpit 风险预算方向正确",
+            "任务状态和备注可保存",
+            "今日复盘和周度摘要可更新",
+        ],
+        data_source="富途真实行情",
+        position_count=3,
+        stock_count=2,
+        option_count=1,
+        has_account_info=True,
+        has_last_backtest=True,
+        strategy_plan_count=2,
+        cockpit_task_count=1,
+        option_combo_count=1,
+    )
+
+    results = frame.set_index("检查项")["结果"].to_dict()
+    notes = frame.set_index("检查项")["备注"].to_dict()
+
+    assert results["OpenD 连接正常"] == "通过"
+    assert results["持仓读取正常"] == "通过"
+    assert results["账户资金读取正常"] == "通过"
+    assert results["股票和期权隔离正确"] == "通过"
+    assert results["期权组合识别合理"] == "需复核"
+    assert results["策略计划动作合理"] == "需复核"
+    assert results["Cockpit 风险预算方向正确"] == "需复核"
+    assert results["今日复盘和周度摘要可更新"] == "未检查"
+    assert "正股/ETF 2 个，期权 1 个" in notes["股票和期权隔离正确"]

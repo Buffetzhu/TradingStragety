@@ -10,8 +10,15 @@ from trend_option_backtest.models import BacktestResult, StrategyConfig
 
 
 class BacktestEngine:
-    def __init__(self, config: StrategyConfig) -> None:
+    def __init__(
+        self,
+        config: StrategyConfig,
+        initial_positions: dict[str, dict[str, float]] | None = None,
+    ) -> None:
         self.config = config
+        # 帐户对齐初始持仓：{symbol: {"shares": float, "cost_basis": float}}
+        # cost_basis = shares * avg_cost（总成本）。为空则从空仓开始。
+        self.initial_positions = initial_positions or {}
 
     def run(self, signal_data: dict[str, pd.DataFrame]) -> BacktestResult:
         symbols = [symbol for symbol in self.config.default_backtest_symbols if symbol in signal_data]
@@ -24,7 +31,15 @@ class BacktestEngine:
         equity_frames: list[pd.DataFrame] = []
 
         for symbol in symbols:
-            trades, equity = self._run_single_symbol(symbol, signal_data[symbol], capital_per_symbol, trade_start_date)
+            seed = self.initial_positions.get(symbol) or {}
+            trades, equity = self._run_single_symbol(
+                symbol,
+                signal_data[symbol],
+                capital_per_symbol,
+                trade_start_date,
+                initial_shares=float(seed.get("shares", 0.0) or 0.0),
+                initial_cost_basis=float(seed.get("cost_basis", 0.0) or 0.0),
+            )
             all_trades.extend(trades)
             equity_frames.append(equity.rename(columns={"equity": symbol}))
 
@@ -56,10 +71,14 @@ class BacktestEngine:
         frame: pd.DataFrame,
         initial_capital: float,
         trade_start_date: pd.Timestamp,
+        *,
+        initial_shares: float = 0.0,
+        initial_cost_basis: float = 0.0,
     ) -> tuple[list[dict[str, Any]], pd.DataFrame]:
-        cash = initial_capital
-        shares = 0.0
-        cost_basis = 0.0
+        # 账户对齐：如有初始持仓，现金扣除总成本（不低于 0）。
+        shares = float(initial_shares)
+        cost_basis = float(initial_cost_basis) if shares > 0 else 0.0
+        cash = max(0.0, initial_capital - cost_basis)
         previous_reduce_signal = False
         trades: list[dict[str, Any]] = []
         equity_rows: list[dict[str, Any]] = []
