@@ -487,20 +487,23 @@ st.markdown(
     .meta-chip .dot {width: 6px; height: 6px; border-radius: 999px; background: currentColor;}
 
     /* \u5de5\u4f5c\u6a21\u5f0f radio \u6539\u9020\u6210 segmented control */
-    div[role="radiogroup"][aria-label="\u5de5\u4f5c\u6a21\u5f0f"] {
+    div[role="radiogroup"][aria-label="workspace_mode_radio"] {
         background: #F1F5F9; padding: 4px; border-radius: 9px;
-        display: inline-flex; gap: 0; border: none;
+        display: inline-flex; gap: 0; border: none; flex-wrap: nowrap;
     }
-    div[role="radiogroup"][aria-label="\u5de5\u4f5c\u6a21\u5f0f"] label {
-        margin: 0 !important; padding: 8px 18px !important;
+    div[role="radiogroup"][aria-label="workspace_mode_radio"] label {
+        margin: 0 !important; padding: 6px 11px !important;
         border-radius: 7px; transition: all .15s;
-        font-weight: 600; color: #475569;
+        font-weight: 600; color: #475569; white-space: nowrap; flex: 0 0 auto;
     }
-    div[role="radiogroup"][aria-label="\u5de5\u4f5c\u6a21\u5f0f"] label:has(input:checked) {
+    div[role="radiogroup"][aria-label="workspace_mode_radio"] label p {
+        font-size: 0.92rem !important; white-space: nowrap;
+    }
+    div[role="radiogroup"][aria-label="workspace_mode_radio"] label:has(input:checked) {
         background: #FFFFFF; color: #0F172A;
         box-shadow: 0 1px 2px rgba(15,23,42,0.08);
     }
-    div[role="radiogroup"][aria-label="\u5de5\u4f5c\u6a21\u5f0f"] label > div:first-child {display: none;}
+    div[role="radiogroup"][aria-label="workspace_mode_radio"] label > div:first-child {display: none;}
 
     /* ======== \u72b6\u6001\u6761\uff08\u6df1\u8272\u9ad8\u5bf9\u6bd4\uff09 ======== */
     .status-bar {
@@ -584,7 +587,8 @@ st.markdown(
         background: linear-gradient(180deg, #2563EB 0%, #1D4ED8 100%);
         border: none; font-weight: 700;
         box-shadow: 0 2px 8px rgba(37,99,235,0.25);
-        padding: 0.55rem 1.6rem;
+        height: 48px; font-size: 1.05rem; border-radius: 10px;
+        padding: 0 1.6rem;
     }
     .stButton > button[kind="primary"]:hover {
         background: linear-gradient(180deg, #1D4ED8 0%, #1E40AF 100%);
@@ -607,6 +611,47 @@ st.markdown(
 
     /* ======== dataframe \u5706\u89d2 ======== */
     [data-testid="stDataFrame"] {border-radius: 10px; overflow: hidden;}
+
+    /* ======== \u590d\u76d8\u6863\u6848\u533a\uff08\u6e10\u53d8\u80cc\u666f + 3\u00d72 \u5361\u7247\u7f51\u683c\uff09 ======== */
+    .archive-section {
+        background: linear-gradient(180deg, #FAFBFD 0%, #F1F5F9 100%);
+        border: 1px solid #E2E8F0; border-radius: 14px;
+        padding: 18px 22px; margin-top: 4px;
+    }
+    .archive-section .arc-title {
+        display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+    }
+    .archive-section .arc-title h3 {
+        margin: 0; font-size: 1.1rem; font-weight: 700; color: #0F172A;
+    }
+    .archive-section .arc-title .arc-badge {
+        background: #E2E8F0; color: #475569; font-size: 0.78rem;
+        padding: 3px 10px; border-radius: 999px; font-weight: 700;
+    }
+    .archive-section .arc-title .arc-tip {
+        margin-left: auto; color: #64748B; font-size: 0.85rem; font-weight: 500;
+    }
+    .archive-section .archive-grid {
+        display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+    }
+    .archive-card {
+        background: #fff; border: 1px solid #E2E8F0; border-radius: 11px;
+        padding: 14px 16px; display: flex; align-items: center; gap: 14px;
+        transition: all .12s; cursor: default;
+    }
+    .archive-card:hover {
+        border-color: #93C5FD; box-shadow: 0 3px 10px rgba(37,99,235,0.08);
+        transform: translateY(-1px);
+    }
+    .archive-card .ic {
+        width: 42px; height: 42px; border-radius: 10px;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 1.25rem; flex-shrink: 0;
+    }
+    .archive-card .body {flex: 1; min-width: 0;}
+    .archive-card .body .t {font-size: 0.98rem; font-weight: 700; color: #0F172A;}
+    .archive-card .body .s {font-size: 0.82rem; color: #64748B; margin-top: 3px; font-weight: 500; line-height: 1.45;}
+    .archive-card .chev {color: #94A3B8; font-size: 1.1rem;}
     </style>
     """,
     unsafe_allow_html=True,
@@ -616,48 +661,49 @@ st.markdown(
 _hero_env_chip = "\u771f\u8d26\u6237\u00b7\u53ea\u8bfb" if st.session_state.get("position_env_label", "\u771f\u5b9e\u8d26\u6237\uff08\u53ea\u8bfb\uff09") == "\u771f\u5b9e\u8d26\u6237\uff08\u53ea\u8bfb\uff09" else "\u6a21\u62df\u8d26\u6237"
 _hero_market_chip = st.session_state.get("position_market_label", "\u7f8e\u80a1 US")
 
-_nav_left, _nav_right = st.columns([6, 4])
-with _nav_left:
+_nav_brand, _nav_mode, _nav_chips = st.columns([2.8, 3.0, 4.2])
+with _nav_brand:
     st.markdown(
         """
         <div style='display:flex;align-items:center;gap:12px;height:68px;'>
             <span style='width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,#2563EB,#60A5FA);
                          color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:1.05rem;'>AT</span>
             <div>
-                <div style='font-size:1.05rem;font-weight:700;color:#0F172A;line-height:1.15;white-space:nowrap;'>\U0001F4C8 AI \u8d8b\u52bf\u4ea4\u6613\u7b56\u7565\u5de5\u4f5c\u53f0</div>
+                <div style='font-size:1.08rem;font-weight:700;color:#0F172A;line-height:1.15;white-space:nowrap;'>\U0001F4C8 AI \u8d8b\u52bf\u4ea4\u6613\u7b56\u7565\u5de5\u4f5c\u53f0</div>
                 <div style='font-size:0.78rem;color:#64748B;margin-top:3px;white-space:nowrap;'>\u672c\u5730\u53ea\u8bfb \u00b7 \u5bcc\u9014\u771f\u8d26\u6237\u9ed8\u8ba4\u4e0d\u89e3\u9501\u3001\u4e0d\u81ea\u52a8\u4e0b\u5355</div>
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-with _nav_right:
+with _nav_mode:
+    st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
+    # \u8fc1\u79fb\u65e7 session_state\uff08\u65e0 emoji \u7248\u672c\uff09\uff0c\u907f\u514d default \u4e0d\u5728 options \u62a5\u9519
+    _legacy = st.session_state.get("workspace_mode")
+    if _legacy in ("\u6a21\u62df\u7814\u7a76", "\u8d26\u6237\u8ffd\u8e2a"):
+        st.session_state["workspace_mode"] = "\U0001F4CA \u6a21\u62df\u7814\u7a76" if _legacy == "\u6a21\u62df\u7814\u7a76" else "\U0001F4BC \u8d26\u6237\u8ffd\u8e2a"
+    workspace_mode = st.radio(
+        "workspace_mode_radio",
+        options=["\U0001F4CA \u6a21\u62df\u7814\u7a76", "\U0001F4BC \u8d26\u6237\u8ffd\u8e2a"],
+        horizontal=True,
+        help="\u6a21\u62df\u7814\u7a76\uff1a\u7eaf\u56de\u6d4b\u548c\u53c2\u6570\u8c03\u8bd5\uff0c\u4e0d\u8bfb\u53d6\u8d26\u6237\u3002\u8d26\u6237\u8ffd\u8e2a\uff1a\u57fa\u4e8e\u5bcc\u9014\u6301\u4ed3\u548c\u8d44\u91d1\u505a\u4eca\u65e5\u7b56\u7565\u8ffd\u8e2a\u548c\u590d\u76d8\u3002",
+        key="workspace_mode",
+        label_visibility="collapsed",
+    )
+with _nav_chips:
     st.markdown(
         f"""
-        <div style='display:flex;align-items:center;justify-content:flex-end;gap:10px;height:68px;flex-wrap:wrap;'>
-            <span class='meta-chip live'><span class='dot'></span>\u5bcc\u9014\u884c\u60c5</span>
-            <span class='meta-chip'>\u73af\u5883 <strong>{_hero_env_chip}</strong></span>
-            <span class='meta-chip'>\u5e02\u573a <strong>{_hero_market_chip}</strong></span>
+        <div style='display:flex;align-items:center;justify-content:flex-end;gap:10px;height:68px;flex-wrap:nowrap;'>
+            <span class='meta-chip live'><span class='dot'></span>\u5bcc\u9014\u771f\u5b9e\u884c\u60c5</span>
+            <span class='meta-chip'>{_hero_env_chip}</span>
             <span class='meta-chip'>v{APP_VERSION}</span>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-# \u6a21\u5f0f\u5207\u6362\u72ec\u7acb\u4e00\u884c\uff0c\u9632\u6b62 nav \u4e09\u680f\u62e5\u6324
-_mode_l, _mode_c, _mode_r = st.columns([3, 4, 3])
-with _mode_c:
-    workspace_mode = st.radio(
-        "\u5de5\u4f5c\u6a21\u5f0f",
-        options=["\u6a21\u62df\u7814\u7a76", "\u8d26\u6237\u8ffd\u8e2a"],
-        horizontal=True,
-        help="\u6a21\u62df\u7814\u7a76\uff1a\u7eaf\u56de\u6d4b\u548c\u53c2\u6570\u8c03\u8bd5\uff0c\u4e0d\u8bfb\u53d6\u8d26\u6237\u3002\u8d26\u6237\u8ffd\u8e2a\uff1a\u57fa\u4e8e\u5bcc\u9014\u6301\u4ed3\u548c\u8d44\u91d1\u505a\u4eca\u65e5\u7b56\u7565\u8ffd\u8e2a\u548c\u590d\u76d8\u3002",
-        key="workspace_mode",
-        label_visibility="collapsed",
-    )
-
-show_account = workspace_mode == "\u8d26\u6237\u8ffd\u8e2a"
-show_simulation = workspace_mode == "\u6a21\u62df\u7814\u7a76"
+show_account = workspace_mode.endswith("\u8d26\u6237\u8ffd\u8e2a")
+show_simulation = workspace_mode.endswith("\u6a21\u62df\u7814\u7a76")
 
 # ===== \u72b6\u6001\u6761\u5360\u4f4d\uff08\u5728\u56de\u6d4b\u4e0e\u8d26\u6237\u6570\u636e\u52a0\u8f7d\u540e\u586b\u5145\uff09 =====
 _status_bar_placeholder = st.empty()

@@ -563,17 +563,17 @@ def _render_today_tab(ctx: WorkspaceContext) -> None:
 
             st.markdown(
                 f"""
-                <div style='background:#FFFFFF;border:1px solid #E2E8F0;border-radius:12px;
-                            padding:16px 20px;margin-bottom:12px;box-shadow:0 1px 2px rgba(15,23,42,0.04);'>
+                <div style='background:#FFFFFF;border:1px solid #E2E8F0;border-left:5px solid {_pfg};border-radius:12px;
+                            padding:16px 20px;margin-bottom:12px;box-shadow:0 1px 3px rgba(15,23,42,0.05);'>
                     <div style='display:flex;align-items:center;flex-wrap:wrap;gap:12px;'>
-                        <span style='background:{_bg};color:{_fg};padding:4px 14px;border-radius:999px;
-                                     font-weight:700;font-size:0.92rem;letter-spacing:0.3px;'>{_action_text}</span>
-                        <span style='font-size:1.25rem;font-weight:700;color:#0F172A;letter-spacing:0.2px;'>{_row.get('标的', '')}</span>
-                        <span style='background:{_pbg};color:{_pfg};padding:4px 12px;border-radius:8px;
-                                     font-weight:600;font-size:0.9rem;'>{_priority_text}</span>
-                        <span style='margin-left:auto;font-weight:700;font-size:1.3rem;color:#0F172A;letter-spacing:0.3px;'>{_amt_text}</span>
+                        <span style='background:{_bg};color:{_fg};padding:5px 14px;border-radius:999px;
+                                     font-weight:700;font-size:0.95rem;letter-spacing:0.3px;'>{_action_text}</span>
+                        <span style='font-size:1.4rem;font-weight:800;color:#0F172A;letter-spacing:-0.3px;'>{_row.get('标的', '')}</span>
+                        <span style='background:{_pbg};color:{_pfg};padding:4px 12px;border-radius:7px;
+                                     font-weight:700;font-size:0.9rem;'>{_priority_text}</span>
+                        <span style='margin-left:auto;font-weight:800;font-size:1.5rem;color:#0F172A;letter-spacing:-0.3px;'>{_amt_text}</span>
                     </div>
-                    {('<div style="color:#475569;font-size:0.92rem;margin-top:10px;line-height:1.5;">' + _meta_text + '</div>') if _meta_text else ''}
+                    {('<div style="color:#475569;font-size:0.98rem;margin-top:12px;line-height:1.5;font-weight:500;">' + _meta_text + '</div>') if _meta_text else ''}
                     {''.join(_detail_lines)}
                 </div>
                 """,
@@ -615,36 +615,39 @@ def _render_today_tab(ctx: WorkspaceContext) -> None:
 
 
 def _render_archive_tab(ctx: WorkspaceContext) -> None:
-    """📜 复盘档案 tab：彩色档案网格（占位 + 跳转提示）。"""
-    st.subheader("复盘档案")
-    st.caption("档案性视图：风险预算明细、Cockpit 复盘、检查清单、回测历史、期权组合归档、单标的研究。")
-
+    """\U0001F4DC \u590d\u76d8\u6863\u6848 tab\uff1a\u6e10\u53d8\u80cc\u666f\u6863\u6848\u533a + 3\u00d72 \u5f69\u8272\u5361\u7247\u7f51\u683c\u3002"""
     _archive_cards = [
-        ("⚠️", "风险预算明细", "FEF3C7", "B45309", "查看每条计划占用的资金 / 名义风险，与 Cockpit tab 同源。"),
-        ("📓", "Cockpit 复盘", "DCFCE7", "15803D", "今日复盘记录与周度趋势，存档于 Cockpit tab → 今日复盘。"),
-        ("📊", "回测历史", "DBEAFE", "1D4ED8", "近 20 次回测结果存档于左侧🚀 运行面板 → 回测历史。"),
-        ("🧩", "期权组合归档", "EDE9FE", "6D28D9", "已识别的常见期权组合明细，详见 今日决策 tab → 期权持仓关联。"),
-        ("✅", "真实账户检查", "FEE2E2", "B91C1C", "真实账户每日检查清单与通过率统计，详见 Cockpit tab。"),
-        ("🔍", "单标的研究", "E0F2FE", "0369A1", "单标的图表与近期信号详情，详见 今日决策 tab 末尾。"),
+        ("\u26a0\ufe0f", "\u98ce\u9669\u9884\u7b97\u660e\u7ec6", "FEF3C7", "B45309", "\u67e5\u770b\u6bcf\u6761\u8ba1\u5212\u5360\u7528\u7684\u8d44\u91d1 / \u540d\u4e49\u98ce\u9669\uff0c\u4e0e Cockpit tab \u540c\u6e90\u3002"),
+        ("\U0001F4D3", "Cockpit \u590d\u76d8", "DCFCE7", "15803D", "\u4eca\u65e5\u590d\u76d8\u8bb0\u5f55\u4e0e\u5468\u5ea6\u8d8b\u52bf\uff0c\u5b58\u6863\u4e8e Cockpit tab \u2192 \u4eca\u65e5\u590d\u76d8\u3002"),
+        ("\U0001F4CA", "\u56de\u6d4b\u5386\u53f2", "DBEAFE", "1D4ED8", "\u8fd1 20 \u6b21\u56de\u6d4b\u7ed3\u679c\u5b58\u6863\u4e8e\u5de6\u4fa7\U0001F680 \u8fd0\u884c\u9762\u677f \u2192 \u56de\u6d4b\u5386\u53f2\u3002"),
+        ("\U0001F9E9", "\u671f\u6743\u7ec4\u5408\u5f52\u6863", "EDE9FE", "6D28D9", "\u5df2\u8bc6\u522b\u7684\u5e38\u89c1\u671f\u6743\u7ec4\u5408\u660e\u7ec6\uff0c\u8be6\u89c1 \u4eca\u65e5\u51b3\u7b56 tab \u2192 \u671f\u6743\u6301\u4ed3\u5173\u8054\u3002"),
+        ("\u2705", "\u771f\u5b9e\u8d26\u6237\u68c0\u67e5", "FEE2E2", "B91C1C", "\u771f\u5b9e\u8d26\u6237\u6bcf\u65e5\u68c0\u67e5\u6e05\u5355\u4e0e\u901a\u8fc7\u7387\u7edf\u8ba1\uff0c\u8be6\u89c1 Cockpit tab\u3002"),
+        ("\U0001F50D", "\u5355\u6807\u7684\u7814\u7a76", "E0F2FE", "0369A1", "\u5355\u6807\u7684\u56fe\u8868\u4e0e\u8fd1\u671f\u4fe1\u53f7\u8be6\u60c5\uff0c\u8be6\u89c1 \u4eca\u65e5\u51b3\u7b56 tab \u672b\u5c3e\u3002"),
     ]
-    _row1 = st.columns(3)
-    _row2 = st.columns(3)
-    _all_cells = list(_row1) + list(_row2)
-    for cell, (icon, title, bg, fg, desc) in zip(_all_cells, _archive_cards):
-        cell.markdown(
-            f"""
-            <div style='background:#FFFFFF;border:1px solid #E2E8F0;border-radius:14px;
-                        padding:18px 18px 16px;box-shadow:0 1px 2px rgba(15,23,42,0.04);height:100%;'>
-                <div style='display:flex;align-items:center;gap:10px;'>
-                    <span style='width:38px;height:38px;border-radius:10px;background:#{bg};color:#{fg};
-                                 display:inline-flex;align-items:center;justify-content:center;font-size:1.15rem;'>{icon}</span>
-                    <div style='font-weight:700;color:#0F172A;font-size:1rem;'>{title}</div>
-                </div>
-                <div style='color:#475569;font-size:0.88rem;margin-top:10px;line-height:1.55;'>{desc}</div>
+    _cards_html = ""
+    for icon, title, bg, fg, desc in _archive_cards:
+        _cards_html += f"""
+        <div class='archive-card'>
+            <span class='ic' style='background:#{bg};color:#{fg};'>{icon}</span>
+            <div class='body'>
+                <div class='t'>{title}</div>
+                <div class='s'>{desc}</div>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
-    st.info("V0.6 仍以 Cockpit 与 今日决策 为主入口；本 tab 集中跳转，未来版本会把档案数据直接渲染于此。")
+            <span class='chev'>\u203a</span>
+        </div>
+        """
+    st.markdown(
+        f"""
+        <div class='archive-section'>
+            <div class='arc-title'>
+                <h3>\U0001F4DC \u590d\u76d8\u6863\u6848</h3>
+                <span class='arc-badge'>{len(_archive_cards)}</span>
+                <span class='arc-tip'>\u6863\u6848\u6027\u89c6\u56fe\u96c6\u4e2d\u5165\u53e3\uff1bV0.6 \u6570\u636e\u4ecd\u5728 Cockpit / \u4eca\u65e5\u51b3\u7b56 tab \u4e2d\u3002</span>
+            </div>
+            <div class='archive-grid'>
+                {_cards_html}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
