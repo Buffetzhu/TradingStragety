@@ -238,7 +238,7 @@ def _render_single_symbol_chart(ctx: WorkspaceContext) -> None:
                     showlegend=False,
                 ))
     fig.update_layout(
-        height=360,
+        height=520,
         margin=dict(l=10, r=10, t=30, b=10),
         yaxis=dict(title="价格"),
         yaxis2=dict(title="收益率 %", overlaying="y", side="right", showgrid=False, zeroline=True, zerolinecolor="#CBD5E1"),
@@ -506,6 +506,16 @@ def _render_today_tab(ctx: WorkspaceContext) -> None:
         _render_today_actions(ctx)
     with _right_col:
         _render_single_symbol_chart(ctx)
+        if not ctx.strategy_plan_df.empty:
+            action_plan_frame = ctx.strategy_plan_df.drop(columns=["优先级排序"], errors="ignore")
+            with st.expander("全部行动计划表", expanded=False):
+                action_plan_display_df = _clean_display_frame(_select_existing_columns(action_plan_frame, ACTION_PLAN_DISPLAY_COLUMNS))
+                st.dataframe(action_plan_display_df, width="stretch", hide_index=True)
+            with st.expander("行动计划详情", expanded=False):
+                detail_df = _clean_display_frame(_select_existing_columns(action_plan_frame, ACTION_PLAN_DETAIL_COLUMNS))
+                st.dataframe(detail_df, width="stretch", hide_index=True)
+            export_df = build_strategy_plan_export_frame(ctx.strategy_plan_df, config=ctx.config, data_source=ctx.data_source, equity_df=ctx.equity_df, capital_source=ctx.capital_source, capital_value=float(ctx.capital_value), position_source="当前持仓表" if ctx.current_positions else "回测模拟", app_version=ctx.app_version, account_info=ctx.account_info)
+            st.download_button("下载今日行动计划 CSV", data=_dataframe_to_csv_bytes(export_df), file_name="strategy_action_plan.csv", mime="text/csv", width="stretch")
 
 
 def _render_today_actions(ctx: WorkspaceContext) -> None:
@@ -589,15 +599,7 @@ def _render_today_actions(ctx: WorkspaceContext) -> None:
                 unsafe_allow_html=True,
             )
         if len(ctx.strategy_plan_df) > len(_top_rows):
-            st.caption(f"还有 {len(ctx.strategy_plan_df) - len(_top_rows)} 条次优先动作，展开下方表格查看。")
-        with st.expander("全部行动计划表", expanded=False):
-            action_plan_display_df = _clean_display_frame(_select_existing_columns(action_plan_frame, ACTION_PLAN_DISPLAY_COLUMNS))
-            st.dataframe(action_plan_display_df, width="stretch", hide_index=True)
-        with st.expander("行动计划详情", expanded=False):
-            detail_df = _clean_display_frame(_select_existing_columns(action_plan_frame, ACTION_PLAN_DETAIL_COLUMNS))
-            st.dataframe(detail_df, width="stretch", hide_index=True)
-        export_df = build_strategy_plan_export_frame(ctx.strategy_plan_df, config=ctx.config, data_source=ctx.data_source, equity_df=ctx.equity_df, capital_source=ctx.capital_source, capital_value=float(ctx.capital_value), position_source="当前持仓表" if ctx.current_positions else "回测模拟", app_version=ctx.app_version, account_info=ctx.account_info)
-        st.download_button("下载今日行动计划 CSV", data=_dataframe_to_csv_bytes(export_df), file_name="strategy_action_plan.csv", mime="text/csv", width="stretch")
+            st.caption(f"还有 {len(ctx.strategy_plan_df) - len(_top_rows)} 条次优先动作，展开右侧「全部行动计划表」查看。")
 
     if not ctx.watchlist_df.empty:
         with st.expander("策略观察清单", expanded=False):
