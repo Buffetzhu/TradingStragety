@@ -276,7 +276,25 @@ def render_simulation_workspace(ctx: WorkspaceContext) -> None:
 
 
 def render_account_workspace(ctx: WorkspaceContext) -> None:
-    """账户追踪工作区：账户快照 + Cockpit + 行动计划 + 期权关联 + 单标的图。"""
+    """账户追踪工作区：4 tab 主画布（今日决策 / 策略状态 / Cockpit / 复盘档案）。"""
+    _tab_today, _tab_status, _tab_cockpit, _tab_archive = st.tabs([
+        "📋 今日决策",
+        "📈 策略状态",
+        "🎛 Cockpit",
+        "📜 复盘档案",
+    ])
+    with _tab_today:
+        _render_today_tab(ctx)
+    with _tab_status:
+        _render_status_tab(ctx)
+    with _tab_cockpit:
+        _render_cockpit_tab(ctx)
+    with _tab_archive:
+        _render_archive_tab(ctx)
+
+
+def _render_status_tab(ctx: WorkspaceContext) -> None:
+    """📈 策略状态 tab：账户快照（资金 + 持仓汇总）。"""
     st.subheader("账户快照")
     _snap_cols = st.columns(4)
     _snap_cols[0].metric("总资产", _format_money(ctx.account_info.get("total_assets")) if ctx.account_info else "未读取")
@@ -286,10 +304,13 @@ def render_account_workspace(ctx: WorkspaceContext) -> None:
     _option_rows = len(ctx.option_position_symbols)
     _snap_cols[3].metric("持仓条目", f"{_stock_rows} 正股/ETF · {_option_rows} 期权")
     if not ctx.account_info:
-        st.caption("还没读取过账户资金。可点击上方“🔄 一键刷新持仓 + 重跑今日策略”，或到左侧栏“当前持仓与账户资金”里点“读取账户资金”。")
+        st.caption("还没读取过账户资金。可点击左侧“🔄 一键刷新持仓 + 重跑今日策略”，或到左侧账户卡里点“💰 读取资金”。")
     else:
         st.caption(f"账户环境：{ctx.position_env_label}。资金口径来自富途 OpenAPI，仅做读取，不会下单。")
 
+
+def _render_cockpit_tab(ctx: WorkspaceContext) -> None:
+    """🎛 Cockpit tab：策略 Cockpit 全块（含风险预算 / 任务 / 聚焦 / 分区明细 / 快照 / 复盘 / 检查清单）。"""
     st.subheader("策略 Cockpit")
     if ctx.strategy_plan_df.empty:
         st.info("运行回测并生成观察清单后，这里会汇总当前动作、风险队列、接近触发和期权关注。")
@@ -477,6 +498,9 @@ def render_account_workspace(ctx: WorkspaceContext) -> None:
                 summary_cols[3].metric("通过率", _format_pct(float(summary["通过率"])))
                 st.dataframe(regression_history_df.tail(30).sort_values("检查时间", ascending=False), width="stretch", hide_index=True)
 
+
+def _render_today_tab(ctx: WorkspaceContext) -> None:
+    """📋 今日决策 tab：今日行动计划 + 观察清单 + 期权关联 + 单标的图。"""
     st.subheader("今日行动计划")
     if ctx.strategy_plan_df.empty:
         st.info("运行回测后会生成今日行动计划。")
@@ -588,3 +612,39 @@ def render_account_workspace(ctx: WorkspaceContext) -> None:
             st.download_button("下载全部期权单腿明细 CSV", data=_dataframe_to_csv_bytes(ctx.option_overlay_df), file_name="option_overlay_summary.csv", mime="text/csv", width="stretch")
 
     _render_single_symbol_chart(ctx)
+
+
+def _render_archive_tab(ctx: WorkspaceContext) -> None:
+    """📜 复盘档案 tab：彩色档案网格（占位 + 跳转提示）。"""
+    st.subheader("复盘档案")
+    st.caption("档案性视图：风险预算明细、Cockpit 复盘、检查清单、回测历史、期权组合归档、单标的研究。")
+
+    _archive_cards = [
+        ("⚠️", "风险预算明细", "FEF3C7", "B45309", "查看每条计划占用的资金 / 名义风险，与 Cockpit tab 同源。"),
+        ("📓", "Cockpit 复盘", "DCFCE7", "15803D", "今日复盘记录与周度趋势，存档于 Cockpit tab → 今日复盘。"),
+        ("📊", "回测历史", "DBEAFE", "1D4ED8", "近 20 次回测结果存档于左侧🚀 运行面板 → 回测历史。"),
+        ("🧩", "期权组合归档", "EDE9FE", "6D28D9", "已识别的常见期权组合明细，详见 今日决策 tab → 期权持仓关联。"),
+        ("✅", "真实账户检查", "FEE2E2", "B91C1C", "真实账户每日检查清单与通过率统计，详见 Cockpit tab。"),
+        ("🔍", "单标的研究", "E0F2FE", "0369A1", "单标的图表与近期信号详情，详见 今日决策 tab 末尾。"),
+    ]
+    _row1 = st.columns(3)
+    _row2 = st.columns(3)
+    _all_cells = list(_row1) + list(_row2)
+    for cell, (icon, title, bg, fg, desc) in zip(_all_cells, _archive_cards):
+        cell.markdown(
+            f"""
+            <div style='background:#FFFFFF;border:1px solid #E2E8F0;border-radius:14px;
+                        padding:18px 18px 16px;box-shadow:0 1px 2px rgba(15,23,42,0.04);height:100%;'>
+                <div style='display:flex;align-items:center;gap:10px;'>
+                    <span style='width:38px;height:38px;border-radius:10px;background:#{bg};color:#{fg};
+                                 display:inline-flex;align-items:center;justify-content:center;font-size:1.15rem;'>{icon}</span>
+                    <div style='font-weight:700;color:#0F172A;font-size:1rem;'>{title}</div>
+                </div>
+                <div style='color:#475569;font-size:0.88rem;margin-top:10px;line-height:1.55;'>{desc}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+    st.info("V0.6 仍以 Cockpit 与 今日决策 为主入口；本 tab 集中跳转，未来版本会把档案数据直接渲染于此。")

@@ -1126,6 +1126,25 @@ elif "last_backtest" in st.session_state:
     result = saved_backtest["result"]
     data_source = saved_backtest["data_source"]
 else:
+    # \u672a\u8fd0\u884c\u8fc7\u56de\u6d4b\u65f6\uff0c\u5728\u53f3\u680f\u6e32\u67d3 placeholder + 4 tab \u7a7a\u72b6\u6001\uff0c\u8ba9\u9875\u9762\u4ecd\u7136\u5bf9\u9f50 mockup
+    with _right_canvas:
+        if show_account:
+            _t1, _t2, _t3, _t4 = st.tabs([
+                "\U0001F4CB \u4eca\u65e5\u51b3\u7b56",
+                "\U0001F4C8 \u7b56\u7565\u72b6\u6001",
+                "\U0001F39B Cockpit",
+                "\U0001F4DC \u590d\u76d8\u6863\u6848",
+            ])
+            with _t1:
+                st.info("\u8fd8\u6ca1\u751f\u6210\u4eca\u65e5\u51b3\u7b56\u3002\u70b9\u51fb\u5de6\u4fa7 \u25b6 \u8fd0\u884c\u9ed8\u8ba4\u56de\u6d4b \u6216 \U0001F504 \u4e00\u952e\u5237\u65b0\u6301\u4ed3 \u3002")
+            with _t2:
+                st.info("\u8d26\u6237\u5feb\u7167\u9700\u8981\u5148\u5230\u5de6\u4fa7\u8d26\u6237\u5361\u70b9 \U0001F4B0 \u8bfb\u53d6\u8d44\u91d1\u3002")
+            with _t3:
+                st.info("Cockpit \u6570\u636e\u6765\u81ea\u56de\u6d4b\u3002\u70b9\u51fb\u5de6\u4fa7 \u25b6 \u8fd0\u884c\u9ed8\u8ba4\u56de\u6d4b\u3002")
+            with _t4:
+                st.info("\u56de\u6d4b\u5386\u53f2 / \u98ce\u9669\u9884\u7b97\u660e\u7ec6 / \u671f\u6743\u7ec4\u5408\u5f52\u6863 \u7b49\u6863\u6848\u6027\u89c6\u56fe\u4f1a\u5728\u8fd0\u884c\u56de\u6d4b\u540e\u63a5\u5165\u3002")
+        else:
+            st.info("\u8fd8\u6ca1\u8fd0\u884c\u8fc7\u56de\u6d4b\u3002\u70b9\u51fb\u5de6\u4fa7 \u25b6 \u8fd0\u884c\u9ed8\u8ba4\u56de\u6d4b \u6216 \u8fd0\u884c\u5f53\u524d\u53c2\u6570\u3002")
     st.stop()
 
 if not config.default_backtest_symbols:
