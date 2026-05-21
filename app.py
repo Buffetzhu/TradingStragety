@@ -616,7 +616,7 @@ st.markdown(
 _hero_env_chip = "\u771f\u8d26\u6237\u00b7\u53ea\u8bfb" if st.session_state.get("position_env_label", "\u771f\u5b9e\u8d26\u6237\uff08\u53ea\u8bfb\uff09") == "\u771f\u5b9e\u8d26\u6237\uff08\u53ea\u8bfb\uff09" else "\u6a21\u62df\u8d26\u6237"
 _hero_market_chip = st.session_state.get("position_market_label", "\u7f8e\u80a1 US")
 
-_nav_left, _nav_right = st.columns([5, 5])
+_nav_left, _nav_right = st.columns([6, 4])
 with _nav_left:
     st.markdown(
         """
@@ -624,8 +624,8 @@ with _nav_left:
             <span style='width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,#2563EB,#60A5FA);
                          color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:1.05rem;'>AT</span>
             <div>
-                <div style='font-size:1.2rem;font-weight:700;color:#0F172A;line-height:1.1;'>\U0001F4C8 AI \u8d8b\u52bf\u4ea4\u6613\u7b56\u7565\u5de5\u4f5c\u53f0</div>
-                <div style='font-size:0.8rem;color:#64748B;margin-top:3px;'>\u672c\u5730\u53ea\u8bfb \u00b7 \u5bcc\u9014\u771f\u8d26\u6237\u9ed8\u8ba4\u4e0d\u89e3\u9501\u3001\u4e0d\u81ea\u52a8\u4e0b\u5355</div>
+                <div style='font-size:1.05rem;font-weight:700;color:#0F172A;line-height:1.15;white-space:nowrap;'>\U0001F4C8 AI \u8d8b\u52bf\u4ea4\u6613\u7b56\u7565\u5de5\u4f5c\u53f0</div>
+                <div style='font-size:0.78rem;color:#64748B;margin-top:3px;white-space:nowrap;'>\u672c\u5730\u53ea\u8bfb \u00b7 \u5bcc\u9014\u771f\u8d26\u6237\u9ed8\u8ba4\u4e0d\u89e3\u9501\u3001\u4e0d\u81ea\u52a8\u4e0b\u5355</div>
             </div>
         </div>
         """,
@@ -769,12 +769,12 @@ _left_col, _right_col = st.columns([1, 2.4], gap="large")
 _right_canvas = _right_col.container()
 
 with _left_col:
+    _run_panel_box = st.container(border=True)
     _cfg_box = st.container(border=True)
     if show_account:
         _acc_box = st.container(border=True)
     else:
         _acc_box = None
-    _run_panel_box = st.container(border=True)
 
 # 账户相关变量默认值（必须在渲染前初始化，主区始终可用）
 use_manual_positions = False
@@ -1057,14 +1057,15 @@ if show_account and _acc_box is not None:
 with _run_panel_box:
     st.markdown("#### \U0001F680 \u8fd0\u884c")
     if show_account:
-        render_daily_workflow_status(
-            selected_symbols=selected_symbols,
-            positions_df=edited_positions_df,
-            account_info=account_info,
-            data_source=data_source,
-            position_env_label=position_env_label,
-            has_last_backtest="last_backtest" in st.session_state,
-        )
+        with st.expander("\U0001F4CB \u4eca\u65e5\u6d41\u7a0b\u72b6\u6001", expanded=False):
+            render_daily_workflow_status(
+                selected_symbols=selected_symbols,
+                positions_df=edited_positions_df,
+                account_info=account_info,
+                data_source=data_source,
+                position_env_label=position_env_label,
+                has_last_backtest="last_backtest" in st.session_state,
+            )
 
         _pending_toast = st.session_state.pop("_refresh_toast", None)
         if _pending_toast:
@@ -1109,9 +1110,8 @@ with _run_panel_box:
                 st.rerun()
 
     _auto_run_backtest = st.session_state.pop("auto_run_backtest", False)
-    _run_c1, _run_c2 = st.columns(2)
-    run_default = _run_c1.button("\u25b6 \u8fd0\u884c\u9ed8\u8ba4\u56de\u6d4b", type="primary", width="stretch") or _auto_run_backtest
-    run_current = _run_c2.button("\u8fd0\u884c\u5f53\u524d\u53c2\u6570", width="stretch")
+    run_default = st.button("\u25b6 \u8fd0\u884c\u9ed8\u8ba4\u56de\u6d4b", type="primary", width="stretch") or _auto_run_backtest
+    run_current = st.button("\u8fd0\u884c\u5f53\u524d\u53c2\u6570", width="stretch")
     run_requested = run_default or run_current
 
 
