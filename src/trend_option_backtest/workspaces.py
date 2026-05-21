@@ -276,10 +276,10 @@ def render_simulation_workspace(ctx: WorkspaceContext) -> None:
 
 
 def render_account_workspace(ctx: WorkspaceContext) -> None:
-    """账户追踪工作区：4 tab 主画布（今日决策 / 策略状态 / Cockpit / 复盘档案）。"""
+    """账户追踪工作区：4 tab 主画布（今日决策 / 账户快照 / Cockpit / 复盘档案）。"""
     _tab_today, _tab_status, _tab_cockpit, _tab_archive = st.tabs([
         "📋 今日决策",
-        "📈 策略状态",
+        "📊 账户快照",
         "🎛 Cockpit",
         "📜 复盘档案",
     ])
@@ -294,7 +294,7 @@ def render_account_workspace(ctx: WorkspaceContext) -> None:
 
 
 def _render_status_tab(ctx: WorkspaceContext) -> None:
-    """📈 策略状态 tab：账户快照（资金 + 持仓汇总）。"""
+    """� 账户快照 tab：资金 + 持仓汇总。"""
     st.subheader("账户快照")
     _snap_cols = st.columns(4)
     _snap_cols[0].metric("总资产", _format_money(ctx.account_info.get("total_assets")) if ctx.account_info else "未读取")
