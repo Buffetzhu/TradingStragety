@@ -997,12 +997,12 @@ _left_col, _right_col = st.columns([1, 2.4], gap="large")
 _right_canvas = _right_col.container()
 
 with _left_col:
-    _run_panel_box = st.container(border=True)
-    _cfg_box = st.container(border=True)
-    if show_account:
-        _acc_box = st.container(border=True)
-    else:
-        _acc_box = None
+    # mockup \u5bf9\u9f50\uff1a\u5de6\u4fa7\u53ea\u4e00\u4e2a\u5927\u5361\u7247\uff0c\u5185\u90e8\u4e09\u4e2a\u903b\u8f91\u533a\uff08\u8fd0\u884c / \u914d\u7f6e / \u8d26\u6237\uff09\u65e0\u5185\u8fb9\u6846
+    _left_card = st.container(border=True)
+    with _left_card:
+        _run_panel_box = st.container()
+        _cfg_box = st.container()
+        _acc_box = st.container() if show_account else None
 
 # 账户相关变量默认值（必须在渲染前初始化，主区始终可用）
 use_manual_positions = False

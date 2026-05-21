@@ -500,7 +500,16 @@ def _render_cockpit_tab(ctx: WorkspaceContext) -> None:
 
 
 def _render_today_tab(ctx: WorkspaceContext) -> None:
-    """📋 今日决策 tab：今日行动计划 + 观察清单 + 期权关联 + 单标的图。"""
+    """\U0001F4CB \u4eca\u65e5\u51b3\u7b56 tab\uff1amockup \u5bf9\u9f50\u7684 2 \u5217\u5e03\u5c40\uff1a\u5de6\u884c\u52a8\u5361 / \u53f3\u5355\u6807\u7684\u56fe\u8868\u3002"""
+    _left_col, _right_col = st.columns([1.0, 1.15], gap="large")
+    with _left_col:
+        _render_today_actions(ctx)
+    with _right_col:
+        _render_single_symbol_chart(ctx)
+
+
+def _render_today_actions(ctx: WorkspaceContext) -> None:
+    """\u5de6\u5217\uff1a\u4eca\u65e5\u884c\u52a8\u8ba1\u5212 + \u89c2\u5bdf\u6e05\u5355 + \u671f\u6743\u5173\u8054\u3002"""
     st.subheader("今日行动计划")
     if ctx.strategy_plan_df.empty:
         st.info("运行回测后会生成今日行动计划。")
@@ -611,11 +620,8 @@ def _render_today_tab(ctx: WorkspaceContext) -> None:
                 st.dataframe(unmatched_option_legs_df, width="stretch", hide_index=True)
             st.download_button("下载全部期权单腿明细 CSV", data=_dataframe_to_csv_bytes(ctx.option_overlay_df), file_name="option_overlay_summary.csv", mime="text/csv", width="stretch")
 
-    _render_single_symbol_chart(ctx)
-
 
 def _render_archive_tab(ctx: WorkspaceContext) -> None:
-    """\U0001F4DC \u590d\u76d8\u6863\u6848 tab\uff1a\u6e10\u53d8\u80cc\u666f\u6863\u6848\u533a + 3\u00d72 \u5f69\u8272\u5361\u7247\u7f51\u683c\u3002"""
     _archive_cards = [
         ("\u26a0\ufe0f", "\u98ce\u9669\u9884\u7b97\u660e\u7ec6", "FEF3C7", "B45309", "\u67e5\u770b\u6bcf\u6761\u8ba1\u5212\u5360\u7528\u7684\u8d44\u91d1 / \u540d\u4e49\u98ce\u9669\uff0c\u4e0e Cockpit tab \u540c\u6e90\u3002"),
         ("\U0001F4D3", "Cockpit \u590d\u76d8", "DCFCE7", "15803D", "\u4eca\u65e5\u590d\u76d8\u8bb0\u5f55\u4e0e\u5468\u5ea6\u8d8b\u52bf\uff0c\u5b58\u6863\u4e8e Cockpit tab \u2192 \u4eca\u65e5\u590d\u76d8\u3002"),
