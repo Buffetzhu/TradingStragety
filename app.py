@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -63,6 +64,8 @@ CURRENT_POSITIONS_PATH = ROOT / "data" / "current_positions.csv"
 COCKPIT_SNAPSHOT_PATH = ROOT / "data" / "cockpit_snapshots.csv"
 COCKPIT_REVIEW_PATH = ROOT / "data" / "cockpit_reviews.csv"
 COCKPIT_REGRESSION_PATH = ROOT / "data" / "cockpit_regression_checks.csv"
+SESSION_STATE_PATH = ROOT / "data" / "session_state.json"
+ACCOUNT_SNAPSHOT_PATH = ROOT / "data" / "account_snapshot.json"
 APP_VERSION = (ROOT / "VERSION").read_text(encoding="utf-8").strip() if (ROOT / "VERSION").exists() else "dev"
 
 BACKTEST_HISTORY_LIMIT = 200
@@ -316,6 +319,80 @@ def save_strategy_presets(presets: dict[str, dict]) -> None:
     STRATEGY_PRESETS_PATH.parent.mkdir(parents=True, exist_ok=True)
     with STRATEGY_PRESETS_PATH.open("w", encoding="utf-8") as file:
         json.dump(presets, file, ensure_ascii=False, indent=2)
+
+
+# ===== \u8de8\u4f1a\u8bdd\u72b6\u6001\u6301\u4e45\u5316\uff081\u4e2a JSON\uff09=====
+SESSION_PERSISTED_KEYS = (
+    "config_payload",
+    "selected_backtest_symbols",
+    "pending_selected_backtest_symbols",
+    "align_backtest_with_account",
+    "use_current_positions_for_plan",
+    "workspace_mode",
+    "position_market_label",
+    "position_env_label",
+    "position_futu_host",
+    "position_futu_port",
+)
+
+
+def load_session_state_snapshot() -> dict:
+    """\u4ece data/session_state.json \u8bfb\u53d6\u4e0a\u6b21\u4f1a\u8bdd\u72b6\u6001\u3002\u4efb\u4f55\u9519\u8bef\u90fd\u8fd4\u56de\u7a7a dict\uff0c\u4e0d\u5f71\u54cd\u542f\u52a8\u3002"""
+    if not SESSION_STATE_PATH.exists():
+        return {}
+    try:
+        with SESSION_STATE_PATH.open("r", encoding="utf-8") as file:
+            payload = json.load(file)
+        if not isinstance(payload, dict):
+            return {}
+        return payload
+    except Exception:  # noqa: BLE001 - \u635f\u574f\u6587\u4ef6\u4e0d\u8be5\u963b\u6b62\u542f\u52a8
+        return {}
+
+
+def save_session_state_snapshot(state: dict) -> None:
+    SESSION_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with SESSION_STATE_PATH.open("w", encoding="utf-8") as file:
+            json.dump(state, file, ensure_ascii=False, indent=2, default=str)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def persist_current_session() -> None:
+    """\u62fd\u53d6 SESSION_PERSISTED_KEYS \u5728 st.session_state \u7684\u73b0\u503c\uff0c\u5e76\u5199\u5165\u78c1\u76d8\u3002"""
+    snapshot: dict = {}
+    for key in SESSION_PERSISTED_KEYS:
+        if key in st.session_state:
+            snapshot[key] = st.session_state[key]
+    snapshot["last_persisted_at"] = datetime.now().isoformat(timespec="seconds")
+    if "last_backtest" in st.session_state:
+        snapshot["last_backtest_at"] = datetime.now().isoformat(timespec="seconds")
+    save_session_state_snapshot(snapshot)
+
+
+def load_account_snapshot() -> dict:
+    if not ACCOUNT_SNAPSHOT_PATH.exists():
+        return {}
+    try:
+        with ACCOUNT_SNAPSHOT_PATH.open("r", encoding="utf-8") as file:
+            payload = json.load(file)
+        if not isinstance(payload, dict):
+            return {}
+        return payload
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def save_account_snapshot(account_info: dict) -> None:
+    ACCOUNT_SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    payload = dict(account_info) if isinstance(account_info, dict) else {}
+    payload["_saved_at"] = datetime.now().isoformat(timespec="seconds")
+    try:
+        with ACCOUNT_SNAPSHOT_PATH.open("w", encoding="utf-8") as file:
+            json.dump(payload, file, ensure_ascii=False, indent=2, default=str)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def load_limited_csv(path: Path, limit: int) -> pd.DataFrame:
@@ -810,6 +887,32 @@ default_payload = load_default_config()
 if "backtest_history" not in st.session_state:
     st.session_state["backtest_history"] = load_backtest_history()
 
+# ===== \u8de8\u4f1a\u8bdd\u72b6\u6001\u6062\u590d\uff1a\u9996\u6b21\u52a0\u8f7d\u9875\u9762\u65f6\u8bfb\u53d6\u4e0a\u6b21\u5feb\u7167 =====
+if not st.session_state.get("_session_restored", False):
+    _restored = load_session_state_snapshot()
+    for _key in SESSION_PERSISTED_KEYS:
+        if _key in _restored and _key not in st.session_state:
+            _val = _restored[_key]
+            # workspace_mode \u53ef\u80fd\u662f\u65e7\u683c\u5f0f\uff0c\u8d70\u65e9\u70b9\u7684\u8fc1\u79fb\u903b\u8f91
+            if _key == "workspace_mode" and _val in ("\u6a21\u62df\u7814\u7a76", "\u8d26\u6237\u8ffd\u8e2a"):
+                _val = "\U0001F4CA \u6a21\u62df\u7814\u7a76" if _val == "\u6a21\u62df\u7814\u7a76" else "\U0001F4BC \u8d26\u6237\u8ffd\u8e2a"
+            st.session_state[_key] = _val
+    _restored_account = load_account_snapshot()
+    if _restored_account and "account_info" not in st.session_state:
+        _restored_account.pop("_saved_at", None)
+        st.session_state["account_info"] = _restored_account
+        st.session_state["account_snapshot_saved_at"] = _restored.get("last_persisted_at")
+    # \u6062\u590d\u540e\u81ea\u52a8\u8ddf\u8dd1\u4e00\u6b21\u56de\u6d4b\uff08\u4ec5\u7528\u7f13\u5b58\uff0c\u4e0d\u8c03\u5bcc\u9014\uff09\uff0c\u8ba9\u9875\u9762\u5f00\u7bb1\u5373\u6709\u6570\u636e
+    if (
+        _restored.get("last_backtest_at")
+        and "last_backtest" not in st.session_state
+        and st.session_state.get("config_payload")
+    ):
+        st.session_state["auto_run_backtest"] = True
+        st.session_state["_auto_run_from_restore"] = True
+    st.session_state["_session_restored"] = True
+    st.session_state["_session_last_persisted_at"] = _restored.get("last_persisted_at")
+
 # ===== \u53cc\u680f\u5e03\u5c40\uff1a\u5de6\u4fa7\u63a7\u5236\u53f0 (\u7b56\u7565\u914d\u7f6e + \u8d26\u6237\u6301\u4ed3 + \u8fd0\u884c)\uff0c\u53f3\u4fa7\u4e3b\u753b\u5e03 =====
 _left_col, _right_col = st.columns([1, 2.4], gap="large")
 _right_canvas = _right_col.container()
@@ -1006,6 +1109,7 @@ if show_account and _acc_box is not None:
                     save_current_positions(futu_positions_df)
                     st.session_state["use_current_positions_for_plan"] = True
                     st.session_state["positions_import_message"] = f"已从富途读取并保存 {len(futu_positions_df)} 条持仓。"
+                    persist_current_session()
                     st.rerun()
             except ValueError:
                 st.error("账户 ID 必须是数字；不确定时可以留空。")
@@ -1018,6 +1122,8 @@ if show_account and _acc_box is not None:
                 provider = FutuHistoricalDataProvider(FutuDataConfig(host=position_futu_host, port=position_futu_port, cache_dir=ROOT / "data" / "cache"))
                 st.session_state["account_info"] = provider.get_account_info(market=position_market, trd_env=position_env, acc_id=acc_id)
                 st.session_state["account_import_message"] = "已读取富途账户资金。"
+                save_account_snapshot(st.session_state["account_info"])
+                persist_current_session()
                 st.rerun()
             except ValueError:
                 st.error("账户 ID 必须是数字；不确定时可以留空。")
@@ -1142,6 +1248,7 @@ with _run_panel_box:
                     save_current_positions(_refresh_positions)
                     st.session_state["_pending_use_current_positions"] = True
                 st.session_state["account_info"] = _refresh_provider.get_account_info(market=_refresh_market, trd_env=_refresh_env)
+                save_account_snapshot(st.session_state["account_info"])
                 st.session_state["auto_run_backtest"] = True
                 st.session_state["_refresh_toast"] = {
                     "msg": f"\u5237\u65b0\u6210\u529f\uff1a\u6301\u4ed3 {len(_refresh_positions)} \u6761\u3001\u8d44\u91d1\u5df2\u66f4\u65b0\u3002\u56de\u6d4b\u91cd\u65b0\u8dd1\u4e2d\u2026",
@@ -1253,6 +1360,7 @@ if run_requested:
     history.append(build_backtest_history_row(config, data_source, result, equity_df, "默认参数" if run_default else "当前参数"))
     st.session_state["backtest_history"] = history[-BACKTEST_HISTORY_LIMIT:]
     save_backtest_history(st.session_state["backtest_history"])
+    persist_current_session()
 
 _result_label = "回测结果与权益曲线" if show_simulation else "策略历史回测结果（仅供参考）"
 with st.expander(_result_label, expanded=show_simulation):
