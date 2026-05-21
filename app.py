@@ -10,6 +10,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 
 ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "src"
@@ -729,6 +730,19 @@ st.markdown(
     .archive-card .body .t {font-size: 0.98rem; font-weight: 700; color: #0F172A;}
     .archive-card .body .s {font-size: 0.82rem; color: #64748B; margin-top: 3px; font-weight: 500; line-height: 1.45;}
     .archive-card .chev {color: #94A3B8; font-size: 1.1rem;}
+
+    /* ======== \u5237\u65b0\u5de5\u5177\u680f ======== */
+    .refresh-toolbar-anchor { margin-top: 6px; }
+    .refresh-toolbar-anchor + div [data-testid="stHorizontalBlock"] {
+        background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px;
+        padding: 6px 12px; margin-bottom: 10px; align-items: center;
+        box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+    }
+    .refresh-meta {
+        text-align: right; color: #64748B; font-size: 0.84rem; font-weight: 500;
+        white-space: nowrap; padding-right: 4px;
+    }
+    .refresh-meta b { color: #1E293B; font-weight: 700; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -784,6 +798,7 @@ show_simulation = workspace_mode.endswith("\u6a21\u62df\u7814\u7a76")
 
 # ===== \u72b6\u6001\u6761\u5360\u4f4d\uff08\u5728\u56de\u6d4b\u4e0e\u8d26\u6237\u6570\u636e\u52a0\u8f7d\u540e\u586b\u5145\uff09 =====
 _status_bar_placeholder = st.empty()
+_refresh_toolbar_placeholder = st.empty()
 
 
 def _fmt_money_compact(value) -> str:
@@ -882,6 +897,70 @@ _render_status_bar(
     opt_pos=0,
     last_run_text=_initial_last_run,
 )
+
+
+# ===== \u9876\u90e8\u5237\u65b0\u5de5\u5177\u680f\uff1a\u6309\u9700\u624b\u52a8\u5237\u65b0\u884c\u60c5 / \u8d26\u6237\uff0c\u53ef\u9009\u5b9a\u65f6\u5237\u65b0 =====
+def _do_refresh_account() -> tuple[bool, str]:
+    """\u4ece\u5bcc\u9014\u62c9\u6700\u65b0\u6301\u4ed3 + \u8d44\u91d1\uff0c\u8fd4\u56de (\u662f\u5426\u6210\u529f, \u63d0\u793a\u6587\u5b57)\u3002"""
+    try:
+        _host = st.session_state.get("position_futu_host", "127.0.0.1")
+        _port = int(st.session_state.get("position_futu_port", 11111))
+        _mlbl = st.session_state.get("position_market_label", "\u7f8e\u80a1 US")
+        _elbl = st.session_state.get("position_env_label", "\u771f\u5b9e\u8d26\u6237\uff08\u53ea\u8bfb\uff09")
+        _mkt = {"\u7f8e\u80a1 US": "US", "\u6e2f\u80a1 HK": "HK", "A\u80a1 CN": "CN", "\u65b0\u52a0\u5761 SG": "SG"}.get(_mlbl, "US")
+        _env = "REAL" if _elbl == "\u771f\u5b9e\u8d26\u6237\uff08\u53ea\u8bfb\uff09" else "SIMULATE"
+        _prov = FutuHistoricalDataProvider(FutuDataConfig(host=_host, port=_port, cache_dir=ROOT / "data" / "cache"))
+        _pos = _prov.get_positions(market=_mkt, trd_env=_env)
+        if not _pos.empty:
+            save_current_positions(_pos)
+            st.session_state["_pending_use_current_positions"] = True
+        _acct = _prov.get_account_info(market=_mkt, trd_env=_env)
+        st.session_state["account_info"] = _acct
+        save_account_snapshot(_acct)
+        st.session_state["account_snapshot_saved_at"] = datetime.now().isoformat(timespec="seconds")
+        persist_current_session()
+        return True, f"\u8d26\u6237\u5df2\u5237\u65b0\uff1a\u6301\u4ed3 {len(_pos)} \u6761\u3001\u8d44\u91d1\u5df2\u66f4\u65b0\u3002"
+    except Exception as exc:  # noqa: BLE001
+        return False, format_futu_exception("\u5237\u65b0\u8d26\u6237", exc)
+
+
+def _render_refresh_toolbar() -> None:
+    _saved_at = st.session_state.get("_session_last_persisted_at") or "\u2014"
+    _acct_at = st.session_state.get("account_snapshot_saved_at") or "\u2014"
+    _saved_short = _saved_at[11:16] if isinstance(_saved_at, str) and len(_saved_at) >= 16 else _saved_at
+    _acct_short = _acct_at[11:16] if isinstance(_acct_at, str) and len(_acct_at) >= 16 else _acct_at
+    with _refresh_toolbar_placeholder.container():
+        st.markdown("<div class='refresh-toolbar-anchor'></div>", unsafe_allow_html=True)
+        _t1, _t2, _t3, _t4, _t5 = st.columns([1.3, 1.3, 1.2, 1.8, 4.4])
+        _btn_market = _t1.button("\U0001F504 \u5237\u65b0\u884c\u60c5", width="stretch", help="\u5f3a\u5236\u4ece\u5bcc\u9014\u91cd\u62c9\u6700\u65b0\u884c\u60c5\u4e0d\u8d70\u7f13\u5b58\uff0c\u968f\u540e\u91cd\u8dd1\u56de\u6d4b\u3002", key="tb_refresh_market")
+        _btn_account = _t2.button("\U0001F504 \u5237\u65b0\u8d26\u6237", width="stretch", help="\u4ece\u5bcc\u9014\u91cd\u8bfb\u6301\u4ed3\u548c\u8d44\u91d1\u3002", key="tb_refresh_account")
+        _auto = _t3.checkbox("\u23f1 \u81ea\u52a8", value=st.session_state.get("auto_refresh_enabled", False), key="auto_refresh_enabled", help="\u6253\u5f00\u540e\u6309\u53f3\u4fa7\u5206\u949f\u6570\u81ea\u52a8\u5237\u65b0\u884c\u60c5\uff08\u4e0d\u62c9\u8d26\u6237\uff09\u3002")
+        _interval = _t4.number_input("\u5206\u949f", min_value=1, max_value=60, step=1, value=int(st.session_state.get("auto_refresh_interval_min", 5)), key="auto_refresh_interval_min", label_visibility="collapsed")
+        _t5.markdown(
+            f"<div class='refresh-meta'>\u884c\u60c5\u5237\u65b0\u4e8e <b>{_saved_short}</b> \u00b7 \u8d26\u6237\u5237\u65b0\u4e8e <b>{_acct_short}</b></div>",
+            unsafe_allow_html=True,
+        )
+    if _auto and _interval and int(_interval) > 0:
+        _tick = st_autorefresh(interval=int(_interval) * 60_000, key="auto_refresh_ticker")
+        if _tick > st.session_state.get("_last_auto_tick", 0):
+            st.session_state["_last_auto_tick"] = _tick
+            # \u9996\u6b21 mount (tick=0) \u4e0d\u89e6\u53d1\uff1b\u540e\u7eed tick \u6e05\u7f13\u5b58 + \u91cd\u8dd1\u56de\u6d4b
+            if _tick > 0:
+                st.session_state["_force_refresh_market_cache"] = True
+                st.session_state["auto_run_backtest"] = True
+    if _btn_market:
+        st.session_state["_force_refresh_market_cache"] = True
+        st.session_state["auto_run_backtest"] = True
+        st.session_state["_refresh_toast"] = {"msg": "\u6b63\u5728\u91cd\u62c9\u884c\u60c5\u5e76\u91cd\u8dd1\u56de\u6d4b\u2026", "icon": "\U0001F504"}
+        st.rerun()
+    if _btn_account:
+        _ok, _msg = _do_refresh_account()
+        st.session_state["_refresh_toast"] = {"msg": _msg, "icon": "\U0001F504" if _ok else "\u26a0\ufe0f"}
+        st.rerun()
+
+
+_render_refresh_toolbar()
+
 
 default_payload = load_default_config()
 if "backtest_history" not in st.session_state:
@@ -1313,7 +1392,7 @@ if run_requested:
                 sector_symbol=config.sector_symbol,
                 years=config.backtest_years,
                 warmup_days=config.indicator_warmup_days,
-                use_cache=not refresh_futu_cache,
+                use_cache=not (refresh_futu_cache or st.session_state.pop("_force_refresh_market_cache", False)),
             )
             if data_errors:
                 st.warning("部分标的行情获取失败，系统会跳过失败标的并继续使用可用行情。若是富途真实行情，请先确认 OpenD、市场权限和代码格式。")
