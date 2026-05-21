@@ -440,239 +440,341 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    /* 隐藏 Streamlit 默认页脚 / 部署按钮，让页面更像产品 */
+    /* ======== \u57fa\u7840\uff1a\u9690\u85cf Streamlit \u9ed8\u8ba4\u9875\u811a\u3001\u8bbe\u7f6e\u80cc\u666f\u3001\u52a0\u5bbd\u753b\u5e03 ======== */
     #MainMenu, footer, [data-testid="stToolbar"] [data-testid="stDeployButton"] {visibility: hidden;}
     footer {display: none;}
-
-    /* 主区收紧上边距 + 控制最大宽度，避免在 4K 屏被拉成大字报 */
-    .block-container {padding-top: 1.2rem; padding-bottom: 4rem; max-width: 1400px;}
-
-    /* 顶部品牌条：渐变 + 圆角 + 阴影 */
-    .brand-hero {
-        background: linear-gradient(135deg, #1E3A8A 0%, #2563EB 60%, #38BDF8 100%);
-        color: #FFFFFF;
-        padding: 18px 24px;
-        border-radius: 14px;
-        box-shadow: 0 6px 24px rgba(37, 99, 235, 0.18);
-        margin-bottom: 18px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 12px;
-    }
-    .brand-hero h1 {
-        margin: 0;
-        font-size: 1.45rem;
-        font-weight: 700;
-        letter-spacing: 0.5px;
-    }
-    .brand-hero .brand-sub {
-        margin-top: 4px;
-        font-size: 0.85rem;
-        opacity: 0.85;
-    }
-    .brand-chips {display: flex; gap: 8px; flex-wrap: wrap;}
-    .brand-chip {
-        background: rgba(255, 255, 255, 0.18);
-        color: #FFFFFF;
-        padding: 4px 12px;
-        border-radius: 999px;
-        font-size: 0.78rem;
-        font-weight: 500;
-        backdrop-filter: blur(4px);
-        border: 1px solid rgba(255, 255, 255, 0.25);
-    }
-    .brand-chip strong {font-weight: 600;}
-
-    /* metric 卡片：柔和边框 + 浅底，凸显数据 */
-    [data-testid="stMetric"] {
-        background: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-radius: 12px;
-        padding: 12px 16px;
-        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-        transition: box-shadow 0.15s ease, transform 0.15s ease;
-    }
-    [data-testid="stMetric"]:hover {
-        box-shadow: 0 4px 16px rgba(37, 99, 235, 0.12);
-        transform: translateY(-1px);
-    }
-    [data-testid="stMetricLabel"] {color: #64748B; font-size: 0.78rem; font-weight: 500;}
-    [data-testid="stMetricValue"] {color: #0F172A; font-weight: 700;}
-
-    /* expander 标题字号略大、深色 */
-    .streamlit-expanderHeader, [data-testid="stExpander"] summary {
-        font-weight: 600 !important;
-        color: #1E293B;
-    }
-    [data-testid="stExpander"] {
-        border-radius: 12px !important;
-        border: 1px solid #E2E8F0 !important;
-        background: #FFFFFF;
-    }
-
-    /* 行动计划 / 风险卡片：让 container(border=True) 更有质感 */
-    [data-testid="stVerticalBlockBorderWrapper"] {
-        border-radius: 14px !important;
-        border: 1px solid #E2E8F0 !important;
-        background: #FFFFFF;
-        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
-        transition: box-shadow 0.18s ease, border-color 0.18s ease;
-    }
-    [data-testid="stVerticalBlockBorderWrapper"]:hover {
-        border-color: #BFDBFE !important;
-        box-shadow: 0 6px 20px rgba(37, 99, 235, 0.10);
-    }
-
-    /* 主按钮（type=primary）：深一档蓝 + hover 抬升 */
-    .stButton > button[kind="primary"] {
-        background: linear-gradient(180deg, #2563EB 0%, #1D4ED8 100%);
-        border: none;
-        font-weight: 600;
-        box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
-    }
-    .stButton > button[kind="primary"]:hover {
-        background: linear-gradient(180deg, #1D4ED8 0%, #1E40AF 100%);
-        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
-    }
-    .stButton > button {border-radius: 10px;}
-
-    /* 侧栏：略深底色 + 更紧凑标题 */
-    [data-testid="stSidebar"] {background: #F1F5F9;}
-    [data-testid="stSidebar"] h2 {font-size: 1.05rem; color: #0F172A;}
-    [data-testid="stSidebar"] [data-testid="stExpander"] {background: #FFFFFF;}
-
-    /* tab 字号略大 */
-    .stTabs [data-baseweb="tab"] {font-weight: 600; font-size: 0.92rem;}
-
-    /* 工作模式 radio：横向更紧凑、更像 segmented control */
-    div[role="radiogroup"][aria-label="工作模式"] {
-        background: #FFFFFF;
-        padding: 4px;
-        border-radius: 10px;
-        border: 1px solid #E2E8F0;
-        display: inline-flex;
-        gap: 4px;
-    }
-    div[role="radiogroup"][aria-label="工作模式"] label {
-        margin: 0 !important;
-        padding: 6px 14px !important;
-        border-radius: 8px;
-        transition: background 0.15s ease;
-    }
-    div[role="radiogroup"][aria-label="工作模式"] label:hover {background: #F1F5F9;}
-
-    /* dataframe 角更圆 */
-    [data-testid="stDataFrame"] {border-radius: 10px; overflow: hidden;}
-
-    /* 全局主容器限宽居中（避免大屏下控件被无限拉伸） */
+    html, body, .stApp {background: #F1F5F9 !important;}
     .main .block-container, [data-testid="stMainBlockContainer"] {
-        max-width: 1200px !important;
+        max-width: 1440px !important;
         padding-top: 1.2rem !important;
         padding-left: 1.5rem !important;
         padding-right: 1.5rem !important;
+        padding-bottom: 4rem !important;
         margin: 0 auto !important;
     }
+    /* \u5168\u5c40\u5b57\u53f7\u5e95\u756a\u63d0\u9ad8 + \u62d7\u8888\u9f7f */
+    html, body, .stApp, [class*="stMarkdown"], [data-testid="stMetricLabel"] {
+        -webkit-font-smoothing: antialiased;
+    }
 
-    /* 配置卡片：白底 + 圆角 + 阴影，让控件聚拢成"控制面板"质感 */
+    /* ======== \u9876\u90e8\u5bfc\u822a\u6761\uff08\u767d\u5e95\uff09 ======== */
+    .nav-bar {
+        background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px;
+        padding: 0 22px; margin-bottom: 12px;
+        display: flex; align-items: center; gap: 24px;
+        height: 68px;
+        box-shadow: 0 1px 3px rgba(15,23,42,0.05);
+    }
+    .nav-bar .brand-name {
+        font-size: 1.2rem; font-weight: 700; color: #0F172A;
+        display: flex; align-items: center; gap: 12px;
+    }
+    .nav-bar .logo {
+        width: 36px; height: 36px; border-radius: 9px;
+        background: linear-gradient(135deg, #2563EB, #60A5FA);
+        color: #fff; display: inline-flex; align-items: center; justify-content: center;
+        font-weight: 700; font-size: 1.05rem;
+    }
+    .nav-bar .nav-meta {margin-left: auto; display: flex; gap: 10px; align-items: center;}
+    .meta-chip {
+        background: #F8FAFC; border: 1px solid #E2E8F0; color: #334155;
+        padding: 6px 12px; border-radius: 7px; font-size: 0.85rem; font-weight: 500;
+        display: inline-flex; align-items: center; gap: 7px;
+        white-space: nowrap; flex: 0 0 auto;
+    }
+    .meta-chip strong {white-space: nowrap;}
+    .meta-chip.live {background: #DCFCE7; color: #15803D; border-color: #BBF7D0;}
+    .meta-chip .dot {width: 6px; height: 6px; border-radius: 999px; background: currentColor;}
+
+    /* \u5de5\u4f5c\u6a21\u5f0f radio \u6539\u9020\u6210 segmented control */
+    div[role="radiogroup"][aria-label="\u5de5\u4f5c\u6a21\u5f0f"] {
+        background: #F1F5F9; padding: 4px; border-radius: 9px;
+        display: inline-flex; gap: 0; border: none;
+    }
+    div[role="radiogroup"][aria-label="\u5de5\u4f5c\u6a21\u5f0f"] label {
+        margin: 0 !important; padding: 8px 18px !important;
+        border-radius: 7px; transition: all .15s;
+        font-weight: 600; color: #475569;
+    }
+    div[role="radiogroup"][aria-label="\u5de5\u4f5c\u6a21\u5f0f"] label:has(input:checked) {
+        background: #FFFFFF; color: #0F172A;
+        box-shadow: 0 1px 2px rgba(15,23,42,0.08);
+    }
+    div[role="radiogroup"][aria-label="\u5de5\u4f5c\u6a21\u5f0f"] label > div:first-child {display: none;}
+
+    /* ======== \u72b6\u6001\u6761\uff08\u6df1\u8272\u9ad8\u5bf9\u6bd4\uff09 ======== */
+    .status-bar {
+        background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+        color: #fff;
+        border-radius: 14px; padding: 20px 26px;
+        display: grid;
+        grid-template-columns: repeat(6, 1fr) auto;
+        gap: 28px; align-items: center;
+        margin-bottom: 14px;
+        box-shadow: 0 6px 16px rgba(15,23,42,0.14);
+    }
+    .status-bar .stat {display: flex; flex-direction: column; min-width: 0;}
+    .status-bar .lbl {font-size: 0.82rem; color: #94A3B8; letter-spacing: 0.4px; font-weight: 600; white-space: nowrap;}
+    .status-bar .val {font-size: 1.55rem; font-weight: 700; color: #fff; margin-top: 6px; line-height: 1.15; letter-spacing: -0.2px; white-space: nowrap;}
+    .status-bar .sub {font-size: 0.78rem; color: #CBD5E1; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+    .status-bar .val.green {color: #4ADE80;}
+    .status-bar .val.red {color: #F87171;}
+    .status-bar .val.amber {color: #FBBF24;}
+    .status-bar .last-run {text-align: right; color: #CBD5E1; font-size: 0.85rem; line-height: 1.5;}
+    .status-bar .last-run b {color: #fff; font-size: 0.95rem; font-weight: 700;}
+
+    /* ======== \u5361\u7247\u6837\u5f0f\uff08st.container(border=True)\uff09 ======== */
     [data-testid="stVerticalBlockBorderWrapper"] {
         background: #FFFFFF;
         border: 1px solid #E2E8F0 !important;
         border-radius: 14px !important;
         padding: 1.1rem 1.4rem !important;
-        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.03);
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
         margin-bottom: 0.6rem;
     }
     [data-testid="stVerticalBlockBorderWrapper"] h4 {
-        margin-top: 0 !important;
-        margin-bottom: 0.5rem !important;
-        color: #0F172A;
-        font-size: 1.0rem;
+        margin-top: 0 !important; margin-bottom: 0.6rem !important;
+        color: #0F172A; font-size: 1.05rem; font-weight: 700;
     }
-    /* 卡片内输入控件圆角 */
+    /* \u5361\u7247\u5185 expander \u8f7b\u91cf\u5185\u5d4c */
+    [data-testid="stVerticalBlockBorderWrapper"] [data-testid="stExpander"] {
+        background: #F8FAFC; border: 1px solid #E2E8F0 !important;
+        border-radius: 8px; margin-bottom: 6px; box-shadow: none;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"] [data-testid="stExpander"] summary {
+        padding: 8px 14px !important; font-size: 0.92rem;
+    }
+    /* \u5361\u7247\u5185\u63a7\u4ef6\u5706\u89d2 */
     [data-testid="stVerticalBlockBorderWrapper"] [data-baseweb="select"] > div,
     [data-testid="stVerticalBlockBorderWrapper"] [data-baseweb="input"] > div,
     [data-testid="stVerticalBlockBorderWrapper"] [data-baseweb="base-input"] {
         border-radius: 8px !important;
     }
-    /* 卡片内 expander 改为轻量内嵌样式（去掉重复白底卡片感） */
-    [data-testid="stVerticalBlockBorderWrapper"] [data-testid="stExpander"] {
-        background: #F8FAFC;
-        border: 1px solid #E2E8F0 !important;
-        border-radius: 8px;
-        margin-bottom: 6px;
-        box-shadow: none;
-    }
-    [data-testid="stVerticalBlockBorderWrapper"] [data-testid="stExpander"] summary {
-        padding: 6px 12px !important;
-        font-size: 0.88rem;
-    }
     [data-testid="stVerticalBlockBorderWrapper"] label p {
-        font-size: 0.82rem !important;
-        color: #475569;
+        font-size: 0.88rem !important; color: #475569; font-weight: 500;
     }
 
-    /* 按钮：默认不再拉满，留 padding；primary 按钮稍大 */
-    .stButton > button {
-        border-radius: 8px;
-        padding: 0.45rem 1.2rem;
-        font-weight: 500;
+    /* ======== metric \u5361\u7247 ======== */
+    [data-testid="stMetric"] {
+        background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px;
+        padding: 14px 18px; box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+        transition: all .15s;
     }
-    .stButton > button[kind="primary"] {padding: 0.55rem 1.6rem; font-weight: 600;}
+    [data-testid="stMetric"]:hover {
+        box-shadow: 0 4px 14px rgba(37,99,235,0.10);
+        transform: translateY(-1px);
+    }
+    [data-testid="stMetricLabel"] {color: #64748B; font-size: 0.82rem; font-weight: 600;}
+    [data-testid="stMetricValue"] {color: #0F172A; font-weight: 700;}
+
+    /* ======== expander\uff08\u9876\u5c42\uff09 ======== */
+    [data-testid="stExpander"] {
+        border-radius: 12px !important;
+        border: 1px solid #E2E8F0 !important;
+        background: #FFFFFF;
+        box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+    }
+    .streamlit-expanderHeader, [data-testid="stExpander"] summary {
+        font-weight: 600 !important; color: #1E293B;
+    }
+
+    /* ======== \u6309\u94ae ======== */
+    .stButton > button {border-radius: 8px; padding: 0.45rem 1.2rem; font-weight: 600;}
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(180deg, #2563EB 0%, #1D4ED8 100%);
+        border: none; font-weight: 700;
+        box-shadow: 0 2px 8px rgba(37,99,235,0.25);
+        padding: 0.55rem 1.6rem;
+    }
+    .stButton > button[kind="primary"]:hover {
+        background: linear-gradient(180deg, #1D4ED8 0%, #1E40AF 100%);
+        box-shadow: 0 4px 14px rgba(37,99,235,0.35);
+    }
+
+    /* ======== \u4e3b\u753b\u5e03 tab ======== */
+    .stTabs [data-baseweb="tab-list"] {
+        background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px;
+        padding: 6px; gap: 4px; box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+    }
+    .stTabs [data-baseweb="tab"] {
+        font-weight: 600; font-size: 0.98rem; color: #475569;
+        padding: 9px 18px; border-radius: 8px; margin: 0;
+    }
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        background: #2563EB; color: #FFFFFF;
+    }
+    .stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] {display: none;}
+
+    /* ======== dataframe \u5706\u89d2 ======== */
+    [data-testid="stDataFrame"] {border-radius: 10px; overflow: hidden;}
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# ===== 顶部品牌头 =====
-_hero_env_chip = "真账户·只读" if st.session_state.get("position_env_label", "真实账户（只读）") == "真实账户（只读）" else "模拟账户"
-_hero_market_chip = st.session_state.get("position_market_label", "美股 US")
-st.markdown(
-    f"""
-    <div class="brand-hero">
-        <div>
-            <h1>📈 AI 趋势交易策略工作台</h1>
-            <div class="brand-sub">本地只读 · 富途真账户默认不解锁、不自动下单</div>
-        </div>
-        <div class="brand-chips">
-            <span class="brand-chip">版本 <strong>{APP_VERSION}</strong></span>
-            <span class="brand-chip">市场 <strong>{_hero_market_chip}</strong></span>
-            <span class="brand-chip">环境 <strong>{_hero_env_chip}</strong></span>
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+# ===== \u9876\u90e8\u5bfc\u822a\u6761\uff08\u54c1\u724c + \u73af\u5883 chips + \u6a21\u5f0f\u5207\u6362\uff09 =====
+_hero_env_chip = "\u771f\u8d26\u6237\u00b7\u53ea\u8bfb" if st.session_state.get("position_env_label", "\u771f\u5b9e\u8d26\u6237\uff08\u53ea\u8bfb\uff09") == "\u771f\u5b9e\u8d26\u6237\uff08\u53ea\u8bfb\uff09" else "\u6a21\u62df\u8d26\u6237"
+_hero_market_chip = st.session_state.get("position_market_label", "\u7f8e\u80a1 US")
 
-workspace_mode = st.radio(
-    "工作模式",
-    options=["模拟研究", "账户追踪"],
-    horizontal=True,
-    help="模拟研究：纯回测和参数调试，不读取账户。账户追踪：基于富途持仓和资金做今日策略追踪和复盘。",
-    key="workspace_mode",
-    label_visibility="collapsed",
-)
-show_account = workspace_mode == "账户追踪"
-show_simulation = workspace_mode == "模拟研究"
-st.markdown(
-    f"<div style='color:#475569;font-size:0.85rem;margin:-4px 0 14px 2px;'>"
-    f"当前视图：<strong style='color:#1E293B;'>{workspace_mode}</strong>"
-    f" · {'纯回测与参数调试，不读取真实账户。' if show_simulation else '基于富途持仓与资金，生成今日行动计划。'}"
-    f"</div>",
-    unsafe_allow_html=True,
+_nav_left, _nav_right = st.columns([5, 5])
+with _nav_left:
+    st.markdown(
+        """
+        <div style='display:flex;align-items:center;gap:12px;height:68px;'>
+            <span style='width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,#2563EB,#60A5FA);
+                         color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:1.05rem;'>AT</span>
+            <div>
+                <div style='font-size:1.2rem;font-weight:700;color:#0F172A;line-height:1.1;'>\U0001F4C8 AI \u8d8b\u52bf\u4ea4\u6613\u7b56\u7565\u5de5\u4f5c\u53f0</div>
+                <div style='font-size:0.8rem;color:#64748B;margin-top:3px;'>\u672c\u5730\u53ea\u8bfb \u00b7 \u5bcc\u9014\u771f\u8d26\u6237\u9ed8\u8ba4\u4e0d\u89e3\u9501\u3001\u4e0d\u81ea\u52a8\u4e0b\u5355</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+with _nav_right:
+    st.markdown(
+        f"""
+        <div style='display:flex;align-items:center;justify-content:flex-end;gap:10px;height:68px;flex-wrap:wrap;'>
+            <span class='meta-chip live'><span class='dot'></span>\u5bcc\u9014\u884c\u60c5</span>
+            <span class='meta-chip'>\u73af\u5883 <strong>{_hero_env_chip}</strong></span>
+            <span class='meta-chip'>\u5e02\u573a <strong>{_hero_market_chip}</strong></span>
+            <span class='meta-chip'>v{APP_VERSION}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+# \u6a21\u5f0f\u5207\u6362\u72ec\u7acb\u4e00\u884c\uff0c\u9632\u6b62 nav \u4e09\u680f\u62e5\u6324
+_mode_l, _mode_c, _mode_r = st.columns([3, 4, 3])
+with _mode_c:
+    workspace_mode = st.radio(
+        "\u5de5\u4f5c\u6a21\u5f0f",
+        options=["\u6a21\u62df\u7814\u7a76", "\u8d26\u6237\u8ffd\u8e2a"],
+        horizontal=True,
+        help="\u6a21\u62df\u7814\u7a76\uff1a\u7eaf\u56de\u6d4b\u548c\u53c2\u6570\u8c03\u8bd5\uff0c\u4e0d\u8bfb\u53d6\u8d26\u6237\u3002\u8d26\u6237\u8ffd\u8e2a\uff1a\u57fa\u4e8e\u5bcc\u9014\u6301\u4ed3\u548c\u8d44\u91d1\u505a\u4eca\u65e5\u7b56\u7565\u8ffd\u8e2a\u548c\u590d\u76d8\u3002",
+        key="workspace_mode",
+        label_visibility="collapsed",
+    )
+
+show_account = workspace_mode == "\u8d26\u6237\u8ffd\u8e2a"
+show_simulation = workspace_mode == "\u6a21\u62df\u7814\u7a76"
+
+# ===== \u72b6\u6001\u6761\u5360\u4f4d\uff08\u5728\u56de\u6d4b\u4e0e\u8d26\u6237\u6570\u636e\u52a0\u8f7d\u540e\u586b\u5145\uff09 =====
+_status_bar_placeholder = st.empty()
+
+
+def _fmt_money_compact(value) -> str:
+    if value is None:
+        return "\u2014"
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return "\u2014"
+    if pd.isna(v):
+        return "\u2014"
+    if abs(v) >= 1_000_000:
+        return f"${v/1_000_000:.2f}M"
+    if abs(v) >= 10_000:
+        return f"${v/1_000:.1f}K"
+    return f"${v:,.0f}"
+
+
+def _fmt_pct_signed(value) -> tuple[str, str]:
+    if value is None:
+        return "\u2014", ""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return "\u2014", ""
+    if pd.isna(v):
+        return "\u2014", ""
+    pct = v * 100
+    return f"{pct:+.1f}%", "green" if pct >= 0 else "red"
+
+
+def _render_status_bar(
+    *,
+    account_info: dict | None,
+    strategy_plan_df: "pd.DataFrame | None",
+    metrics: dict | None,
+    env_label: str,
+    years: float | None,
+    stock_pos: int = 0,
+    opt_pos: int = 0,
+    last_run_text: str = "\u2014",
+) -> None:
+    metrics = metrics or {}
+    total_return_text, total_return_cls = _fmt_pct_signed(metrics.get("total_return"))
+    max_dd_text, _ = _fmt_pct_signed(metrics.get("max_drawdown"))
+    sharpe_val = metrics.get("sharpe")
+    try:
+        sharpe_text = f"{float(sharpe_val):.2f}" if sharpe_val is not None and not pd.isna(float(sharpe_val)) else "\u2014"
+    except (TypeError, ValueError):
+        sharpe_text = "\u2014"
+    plan_count = 0
+    plan_urgent = plan_soon = plan_today = 0
+    if strategy_plan_df is not None and not strategy_plan_df.empty:
+        plan_count = int(len(strategy_plan_df))
+        if "\u4f18\u5148\u7ea7" in strategy_plan_df.columns:
+            priorities = strategy_plan_df["\u4f18\u5148\u7ea7"].fillna("").astype(str)
+            plan_urgent = int(priorities.str.contains("\u7acb\u5373").sum())
+            plan_soon = int(priorities.str.contains("\u5c3d\u5feb").sum())
+            plan_today = int(priorities.str.contains("\u4eca\u65e5").sum())
+    acct = account_info or {}
+    total_assets_text = _fmt_money_compact(acct.get("total_assets"))
+    cash_text = _fmt_money_compact(acct.get("cash"))
+    buying_power_text = _fmt_money_compact(acct.get("buying_power"))
+    years_text = f"{years:g} \u5e74" if years else "\u2014"
+    _status_bar_placeholder.markdown(
+        f"""
+        <div class='status-bar'>
+            <div class='stat'><span class='lbl'>\u603b\u8d44\u4ea7</span><span class='val'>{total_assets_text}</span><span class='sub'>{env_label}</span></div>
+            <div class='stat'><span class='lbl'>\u53ef\u7528\u73b0\u91d1</span><span class='val'>{cash_text}</span><span class='sub'>\u8d2d\u4e70\u529b {buying_power_text}</span></div>
+            <div class='stat'><span class='lbl'>\u6301\u4ed3 / \u671f\u6743</span><span class='val'>{stock_pos} <span style="font-size:1rem;color:#94A3B8;font-weight:600;">/ {opt_pos}</span></span><span class='sub'>{plan_urgent} \u4e2a\u9700\u7acb\u5373\u5904\u7406</span></div>
+            <div class='stat'><span class='lbl'>\u884c\u52a8\u8ba1\u5212</span><span class='val amber'>{plan_count} \u4ef6</span><span class='sub'>{plan_urgent} \u7acb\u5373 \u00b7 {plan_soon} \u5c3d\u5feb \u00b7 {plan_today} \u4eca\u65e5</span></div>
+            <div class='stat'><span class='lbl'>\u7b56\u7565\u6536\u76ca</span><span class='val {total_return_cls}'>{total_return_text}</span><span class='sub'>\u56de\u6d4b\u5468\u671f {years_text}</span></div>
+            <div class='stat'><span class='lbl'>\u6700\u5927\u56de\u64a4 / Sharpe</span><span class='val red'>{max_dd_text}</span><span class='sub'>Sharpe {sharpe_text}</span></div>
+            <div class='last-run'>\u6700\u8fd1\u56de\u6d4b<br><b>{last_run_text}</b><br><span style='color:#94A3B8;font-size:0.78rem;'>\u70b9\u51fb\u4e0b\u65b9\u91cd\u8dd1</span></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# \u9996\u5c4f\u5148\u7528 session_state \u53ef\u7528\u6570\u636e\u6e32\u67d3\u4e00\u6b21\uff08\u540e\u9762\u62ff\u5230 ctx \u540e\u8fd8\u4f1a\u5237\u65b0\u8986\u76d6\uff09
+_initial_acct = st.session_state.get("account_info")
+_initial_last = st.session_state.get("last_backtest") or {}
+_initial_history = st.session_state.get("backtest_history", []) or []
+_initial_metrics = _initial_last.get("result").metrics if _initial_last.get("result") is not None else {}
+_initial_years = _initial_last.get("config").backtest_years if _initial_last.get("config") is not None else None
+_initial_env_label = st.session_state.get("position_env_label", "\u672a\u8fde\u63a5")
+_initial_last_run = str(_initial_history[-1].get("\u8fd0\u884c\u65f6\u95f4", "\u2014")) if _initial_history else "\u2014"
+_render_status_bar(
+    account_info=_initial_acct,
+    strategy_plan_df=None,
+    metrics=_initial_metrics,
+    env_label=_initial_env_label,
+    years=_initial_years,
+    stock_pos=0,
+    opt_pos=0,
+    last_run_text=_initial_last_run,
 )
 
 default_payload = load_default_config()
 if "backtest_history" not in st.session_state:
     st.session_state["backtest_history"] = load_backtest_history()
 
-# ===== 配置卡片：全宽容器，内部紧凑分栏 =====
-_cfg_box = st.container(border=True)
-if show_account:
-    _acc_box = st.container(border=True)
-else:
-    _acc_box = None
+# ===== \u53cc\u680f\u5e03\u5c40\uff1a\u5de6\u4fa7\u63a7\u5236\u53f0 (\u7b56\u7565\u914d\u7f6e + \u8d26\u6237\u6301\u4ed3 + \u8fd0\u884c)\uff0c\u53f3\u4fa7\u4e3b\u753b\u5e03 =====
+_left_col, _right_col = st.columns([1, 2.4], gap="large")
+_right_canvas = _right_col.container()
+
+with _left_col:
+    _cfg_box = st.container(border=True)
+    if show_account:
+        _acc_box = st.container(border=True)
+    else:
+        _acc_box = None
+    _run_panel_box = st.container(border=True)
 
 # 账户相关变量默认值（必须在渲染前初始化，主区始终可用）
 use_manual_positions = False
@@ -690,37 +792,27 @@ with _cfg_box:
     current_template_label = get_template_label(payload)
     default_period_label = next((label for label, years in BACKTEST_PERIOD_OPTIONS.items() if years == float(payload.get("backtest_years", 0.5))), "6 个月")
 
-    # 顶部一行：模板 / 周期 / 资金 / 恢复默认
-    top_col1, top_col2, top_col3, top_col4 = st.columns([3, 1.2, 1.4, 1.2])
-    with top_col1:
-        selected_template_label = st.selectbox(
-            "策略模板",
-            options=template_labels,
-            index=template_labels.index(current_template_label) if current_template_label in template_labels else 0,
-            help="模板只调整参数默认值；不会改变只读安全边界，也不会自动下单。",
-        )
-        selected_template = STRATEGY_TEMPLATES[TEMPLATE_LABEL_TO_KEY[selected_template_label]]
-    with top_col2:
-        if show_simulation:
-            period_label = st.selectbox("回测周期", options=list(BACKTEST_PERIOD_OPTIONS.keys()), index=list(BACKTEST_PERIOD_OPTIONS.keys()).index(default_period_label))
-            backtest_years = BACKTEST_PERIOD_OPTIONS[period_label]
-        else:
-            st.markdown("**回测周期**")
-            st.caption(default_period_label)
-            backtest_years = BACKTEST_PERIOD_OPTIONS[default_period_label]
-    with top_col3:
-        if show_simulation:
-            initial_capital = st.number_input("初始资金 ($)", min_value=1000.0, max_value=100000000.0, value=float(payload.get("initial_capital", 100000.0)), step=1000.0, label_visibility="visible")
-        else:
-            st.markdown("**初始资金**")
-            initial_capital = float(payload.get("initial_capital", 100000.0))
-            st.caption(f"${initial_capital:,.0f}（账户模式优先取购买力）")
-    with top_col4:
-        st.markdown("<div style='height: 1.55rem;'></div>", unsafe_allow_html=True)  # 与左侧 label 对齐
-        if st.button("🔄 恢复默认", width="stretch", key="reset_default_btn"):
-            st.session_state["config_payload"] = default_payload.copy()
-            st.session_state["selected_backtest_symbols"] = []
-            st.rerun()
+    # 模板独占一行 · 周期+资金并列 · 恢复默认独占一行
+    selected_template_label = st.selectbox(
+        "策略模板",
+        options=template_labels,
+        index=template_labels.index(current_template_label) if current_template_label in template_labels else 0,
+        help="模板只调整参数默认值；不会改变只读安全边界，也不会自动下单。",
+    )
+    selected_template = STRATEGY_TEMPLATES[TEMPLATE_LABEL_TO_KEY[selected_template_label]]
+    if show_simulation:
+        period_label = st.selectbox("回测周期", options=list(BACKTEST_PERIOD_OPTIONS.keys()), index=list(BACKTEST_PERIOD_OPTIONS.keys()).index(default_period_label))
+        backtest_years = BACKTEST_PERIOD_OPTIONS[period_label]
+        initial_capital = st.number_input("初始资金 ($)", min_value=1000.0, max_value=100000000.0, value=float(payload.get("initial_capital", 100000.0)), step=1000.0, label_visibility="visible")
+    else:
+        st.markdown(f"**回测周期** · {default_period_label}")
+        backtest_years = BACKTEST_PERIOD_OPTIONS[default_period_label]
+        initial_capital = float(payload.get("initial_capital", 100000.0))
+        st.markdown(f"**初始资金** · ${initial_capital:,.0f} <span style='color:#94A3B8;font-size:0.85em;'>（账户优先取购买力）</span>", unsafe_allow_html=True)
+    if st.button("🔄 恢复默认", width="stretch", key="reset_default_btn"):
+        st.session_state["config_payload"] = default_payload.copy()
+        st.session_state["selected_backtest_symbols"] = []
+        st.rerun()
 
     # 模板说明 + (条件) 应用模板按钮
     st.caption(selected_template.description)
@@ -752,63 +844,58 @@ with _cfg_box:
         st.session_state["selected_backtest_symbols"] = [symbol for symbol in normalize_app_symbols(st.session_state["selected_backtest_symbols"]) if symbol in symbol_pool]
     selected_symbols = st.multiselect("参与回测标的", options=symbol_pool, key="selected_backtest_symbols")
 
-    # 底部 4 列抽屉：扩展标的池 / 数据接入 / 策略规则 / 参数预设
-    drawer_col1, drawer_col2, drawer_col3, drawer_col4 = st.columns(4)
-    with drawer_col1:
-        with st.expander("➕ 扩展标的池", expanded=False):
-            manual_symbols_text = st.text_area("手动输入额外股票代码", placeholder="例如：US.TSLA, US.META\nAVGO", height=80, label_visibility="collapsed")
-        manual_symbols = normalize_app_symbols(parse_symbols(manual_symbols_text))
-        if manual_symbols:
-            symbol_pool = normalize_app_symbols([*payload["default_pool"], *manual_symbols])
-    with drawer_col2:
-        with st.expander("📡 数据接入", expanded=False):
-            data_source = st.radio("数据源", options=["演示数据", "富途真实行情"], index=1, horizontal=True)
-            futu_host = "127.0.0.1"
-            futu_port = 11111
-            futu_provider = None
-            refresh_futu_cache = False
-            if data_source == "富途真实行情":
-                futu_host = st.text_input("OpenD 地址", value="127.0.0.1")
-                futu_port = int(st.number_input("OpenD 端口", min_value=1, max_value=65535, value=11111))
-                refresh_futu_cache = st.checkbox("强制刷新行情缓存", value=False)
-                futu_provider = FutuHistoricalDataProvider(FutuDataConfig(host=futu_host, port=futu_port, cache_dir=ROOT / "data" / "cache"))
-                if st.button("测试 OpenD 连接", width="stretch"):
-                    ok, message = futu_provider.test_connection()
-                    if ok:
-                        st.success(message)
-                    else:
-                        st.error(message)
-            if show_account:
-                st.caption("账户模式下默认走富途行情。")
-    with drawer_col3:
-        with st.expander("⚙️ 策略规则参数", expanded=False):
-            ma_short = st.number_input("MA 短周期", min_value=5, max_value=100, value=int(payload["ma_short"]))
-            ma_long = st.number_input("MA 长周期", min_value=10, max_value=250, value=int(payload["ma_long"]))
-            breakout_days = st.number_input("突破回溯天数", min_value=5, max_value=120, value=int(payload["breakout_days"]))
-            volume_multiplier = st.number_input("成交量倍数", min_value=0.5, max_value=5.0, value=float(payload["volume_multiplier"]), step=0.1)
-            overheat_pct = st.number_input("过热距离 MA 短线 (%)", min_value=1.0, max_value=50.0, value=float(payload["overheat_distance"] * 100), step=1.0)
-            entry_position_pct = st.number_input("建仓 %", min_value=5.0, max_value=100.0, value=float(payload.get("entry_position_pct", 0.5) * 100), step=5.0)
-            add_position_pct = st.number_input("加仓 %", min_value=5.0, max_value=100.0, value=float(payload.get("add_position_pct", 0.25) * 100), step=5.0)
-            reduce_position_pct = st.number_input("减仓 %", min_value=5.0, max_value=100.0, value=float(payload.get("reduce_position_pct", 0.5) * 100), step=5.0)
-            min_trade_amount = st.number_input("最小成交金额 ($)", min_value=0.0, max_value=10000.0, value=float(payload.get("min_trade_amount", 100.0)), step=50.0)
-            use_sector_filter = st.checkbox("启用 SOXX 板块共振过滤", value=bool(payload["use_sector_filter"]))
-    with drawer_col4:
-        with st.expander("💾 参数预设", expanded=False):
-            presets = load_strategy_presets()
-            if presets:
-                selected_preset_name = st.selectbox("选择预设", options=sorted(presets.keys()), label_visibility="collapsed")
-                preset_col1, preset_col2 = st.columns(2)
-                if preset_col1.button("加载", width="stretch"):
-                    st.session_state["config_payload"] = presets[selected_preset_name].copy()
-                    st.session_state["pending_selected_backtest_symbols"] = presets[selected_preset_name].get("default_backtest_symbols", [])
-                    st.rerun()
-                if preset_col2.button("删除", width="stretch"):
-                    presets.pop(selected_preset_name, None)
-                    save_strategy_presets(presets)
-                    st.rerun()
-            else:
-                st.caption("还没有保存过参数预设。")
-            preset_name = st.text_input("保存当前参数为", placeholder="例如：半导体趋势默认", label_visibility="collapsed")
+    # 抽屉：4 个 expander 顺序堆叠
+    with st.expander("➕ 扩展标的池", expanded=False):
+        manual_symbols_text = st.text_area("手动输入额外股票代码", placeholder="例如：US.TSLA, US.META\nAVGO", height=80, label_visibility="collapsed")
+    manual_symbols = normalize_app_symbols(parse_symbols(manual_symbols_text))
+    if manual_symbols:
+        symbol_pool = normalize_app_symbols([*payload["default_pool"], *manual_symbols])
+    with st.expander("📡 数据接入", expanded=False):
+        data_source = st.radio("数据源", options=["演示数据", "富途真实行情"], index=1, horizontal=True)
+        futu_host = "127.0.0.1"
+        futu_port = 11111
+        futu_provider = None
+        refresh_futu_cache = False
+        if data_source == "富途真实行情":
+            futu_host = st.text_input("OpenD 地址", value="127.0.0.1")
+            futu_port = int(st.number_input("OpenD 端口", min_value=1, max_value=65535, value=11111))
+            refresh_futu_cache = st.checkbox("强制刷新行情缓存", value=False)
+            futu_provider = FutuHistoricalDataProvider(FutuDataConfig(host=futu_host, port=futu_port, cache_dir=ROOT / "data" / "cache"))
+            if st.button("测试 OpenD 连接", width="stretch"):
+                ok, message = futu_provider.test_connection()
+                if ok:
+                    st.success(message)
+                else:
+                    st.error(message)
+        if show_account:
+            st.caption("账户模式下默认走富途行情。")
+    with st.expander("⚙️ 策略规则参数", expanded=False):
+        ma_short = st.number_input("MA 短周期", min_value=5, max_value=100, value=int(payload["ma_short"]))
+        ma_long = st.number_input("MA 长周期", min_value=10, max_value=250, value=int(payload["ma_long"]))
+        breakout_days = st.number_input("突破回溯天数", min_value=5, max_value=120, value=int(payload["breakout_days"]))
+        volume_multiplier = st.number_input("成交量倍数", min_value=0.5, max_value=5.0, value=float(payload["volume_multiplier"]), step=0.1)
+        overheat_pct = st.number_input("过热距离 MA 短线 (%)", min_value=1.0, max_value=50.0, value=float(payload["overheat_distance"] * 100), step=1.0)
+        entry_position_pct = st.number_input("建仓 %", min_value=5.0, max_value=100.0, value=float(payload.get("entry_position_pct", 0.5) * 100), step=5.0)
+        add_position_pct = st.number_input("加仓 %", min_value=5.0, max_value=100.0, value=float(payload.get("add_position_pct", 0.25) * 100), step=5.0)
+        reduce_position_pct = st.number_input("减仓 %", min_value=5.0, max_value=100.0, value=float(payload.get("reduce_position_pct", 0.5) * 100), step=5.0)
+        min_trade_amount = st.number_input("最小成交金额 ($)", min_value=0.0, max_value=10000.0, value=float(payload.get("min_trade_amount", 100.0)), step=50.0)
+        use_sector_filter = st.checkbox("启用 SOXX 板块共振过滤", value=bool(payload["use_sector_filter"]))
+    with st.expander("💾 参数预设", expanded=False):
+        presets = load_strategy_presets()
+        if presets:
+            selected_preset_name = st.selectbox("选择预设", options=sorted(presets.keys()), label_visibility="collapsed")
+            preset_col1, preset_col2 = st.columns(2)
+            if preset_col1.button("加载", width="stretch"):
+                st.session_state["config_payload"] = presets[selected_preset_name].copy()
+                st.session_state["pending_selected_backtest_symbols"] = presets[selected_preset_name].get("default_backtest_symbols", [])
+                st.rerun()
+            if preset_col2.button("删除", width="stretch"):
+                presets.pop(selected_preset_name, None)
+                save_strategy_presets(presets)
+                st.rerun()
+        else:
+            st.caption("还没有保存过参数预设。")
+        preset_name = st.text_input("保存当前参数为", placeholder="例如：半导体趋势默认", label_visibility="collapsed")
 
 
     current_payload = {
@@ -846,23 +933,23 @@ with _cfg_box:
 if show_account and _acc_box is not None:
     with _acc_box:
         st.markdown("#### 💼 账户与持仓")
-        st.caption("日常流程：先读取持仓和账户资金，再把缺失标的加入回测，最后运行回测生成今日行动计划。")
         if "positions_import_message" in st.session_state:
             st.success(st.session_state.pop("positions_import_message"))
         if "account_import_message" in st.session_state:
             st.success(st.session_state.pop("account_import_message"))
-        import_col1, import_col2 = st.columns(2)
-        position_futu_host = import_col1.text_input("持仓 OpenD 地址", value="127.0.0.1", key="position_futu_host")
-        position_futu_port = int(import_col2.number_input("持仓 OpenD 端口", min_value=1, max_value=65535, value=11111, key="position_futu_port"))
-        import_col3, import_col4 = st.columns(2)
-        position_market_label = import_col3.selectbox("持仓市场", options=["美股 US", "港股 HK", "A股 CN", "新加坡 SG"], key="position_market_label")
-        position_env_label = import_col4.selectbox("交易环境", options=["模拟账户", "真实账户（只读）"], index=1, key="position_env_label")
-        position_acc_id_text = st.text_input("账户 ID（可选）", placeholder="不填则使用 OpenD 默认账户")
+        with st.expander("🔌 OpenD 连接配置", expanded=False):
+            import_col1, import_col2 = st.columns(2)
+            position_futu_host = import_col1.text_input("OpenD 地址", value="127.0.0.1", key="position_futu_host")
+            position_futu_port = int(import_col2.number_input("OpenD 端口", min_value=1, max_value=65535, value=11111, key="position_futu_port"))
+            import_col3, import_col4 = st.columns(2)
+            position_market_label = import_col3.selectbox("持仓市场", options=["美股 US", "港股 HK", "A股 CN", "新加坡 SG"], key="position_market_label")
+            position_env_label = import_col4.selectbox("交易环境", options=["模拟账户", "真实账户（只读）"], index=1, key="position_env_label")
+            position_acc_id_text = st.text_input("账户 ID（可选）", placeholder="不填则使用 OpenD 默认账户")
         position_market = {"美股 US": "US", "港股 HK": "HK", "A股 CN": "CN", "新加坡 SG": "SG"}[position_market_label]
         position_env = "REAL" if position_env_label == "真实账户（只读）" else "SIMULATE"
 
         action_col1, action_col2 = st.columns(2)
-        if action_col1.button("从富途读取持仓", width="stretch"):
+        if action_col1.button("📥 读取持仓", width="stretch"):
             try:
                 acc_id = int(position_acc_id_text.strip()) if position_acc_id_text.strip() else None
                 provider = FutuHistoricalDataProvider(FutuDataConfig(host=position_futu_host, port=position_futu_port, cache_dir=ROOT / "data" / "cache"))
@@ -879,7 +966,7 @@ if show_account and _acc_box is not None:
             except Exception as exc:
                 st.error(format_futu_exception("富途持仓读取", exc))
 
-        if action_col2.button("读取账户资金", width="stretch"):
+        if action_col2.button("💰 读取资金", width="stretch"):
             try:
                 acc_id = int(position_acc_id_text.strip()) if position_acc_id_text.strip() else None
                 provider = FutuHistoricalDataProvider(FutuDataConfig(host=position_futu_host, port=position_futu_port, cache_dir=ROOT / "data" / "cache"))
@@ -967,66 +1054,66 @@ if show_account and _acc_box is not None:
         if use_manual_positions:
             current_positions = build_current_positions_map(edited_positions_df)
 
-if show_account:
-    render_daily_workflow_status(
-        selected_symbols=selected_symbols,
-        positions_df=edited_positions_df,
-        account_info=account_info,
-        data_source=data_source,
-        position_env_label=position_env_label,
-        has_last_backtest="last_backtest" in st.session_state,
-    )
+with _run_panel_box:
+    st.markdown("#### \U0001F680 \u8fd0\u884c")
+    if show_account:
+        render_daily_workflow_status(
+            selected_symbols=selected_symbols,
+            positions_df=edited_positions_df,
+            account_info=account_info,
+            data_source=data_source,
+            position_env_label=position_env_label,
+            has_last_backtest="last_backtest" in st.session_state,
+        )
 
-if show_account:
-    _pending_toast = st.session_state.pop("_refresh_toast", None)
-    if _pending_toast:
-        st.toast(_pending_toast["msg"], icon=_pending_toast.get("icon", "✅"))
-    st.info(f"📌 当前策略来源：**{selected_template_label}**。切换模板请到左侧栏“策略参数”，参数细调在“策略规则参数”折叠面板里。")
-    st.checkbox(
-        "账户对齐回测（用真实持仓种子化）",
-        value=st.session_state.get("align_backtest_with_account", False),
-        key="align_backtest_with_account",
-        help="开启后，回测起点会按你当前持仓（股数 × 成本价）种子化，模拟策略接管现有账户的表现。仅作参考，不改变历史信号。",
-    )
-    if st.button(
-        "🔄 一键刷新持仓 + 重跑今日策略",
-        type="primary",
-        width="stretch",
-        help="重新从富途读取持仓和账户资金，然后立即跑一次当前模板的回测，生成最新行动计划。",
-    ):
-        try:
-            _refresh_host = st.session_state.get("position_futu_host", "127.0.0.1")
-            _refresh_port = int(st.session_state.get("position_futu_port", 11111))
-            _market_label = st.session_state.get("position_market_label", "美股 US")
-            _env_label = st.session_state.get("position_env_label", "真实账户（只读）")
-            _refresh_market = {"美股 US": "US", "港股 HK": "HK", "A股 CN": "CN", "新加坡 SG": "SG"}[_market_label]
-            _refresh_env = "REAL" if _env_label == "真实账户（只读）" else "SIMULATE"
-            _refresh_provider = FutuHistoricalDataProvider(FutuDataConfig(host=_refresh_host, port=_refresh_port, cache_dir=ROOT / "data" / "cache"))
-            _refresh_positions = _refresh_provider.get_positions(market=_refresh_market, trd_env=_refresh_env)
-            if not _refresh_positions.empty:
-                save_current_positions(_refresh_positions)
-                st.session_state["_pending_use_current_positions"] = True
-            st.session_state["account_info"] = _refresh_provider.get_account_info(market=_refresh_market, trd_env=_refresh_env)
-            st.session_state["auto_run_backtest"] = True
-            st.session_state["_refresh_toast"] = {
-                "msg": f"刷新成功：持仓 {len(_refresh_positions)} 条、资金已更新。回测重新跑中…",
-                "icon": "🔄",
-            }
-            st.rerun()
-        except Exception as exc:
-            st.session_state["_refresh_toast"] = {
-                "msg": f"刷新失败：{format_futu_exception('一键刷新', exc)}",
-                "icon": "⚠️",
-            }
-            st.rerun()
+        _pending_toast = st.session_state.pop("_refresh_toast", None)
+        if _pending_toast:
+            st.toast(_pending_toast["msg"], icon=_pending_toast.get("icon", "\u2705"))
+        st.info(f"\U0001F4CC \u5f53\u524d\u7b56\u7565\u6765\u6e90\uff1a**{selected_template_label}**\u3002\u5207\u6362\u6a21\u677f\u8bf7\u5230\u5de6\u4fa7\u680f\u201c\u7b56\u7565\u53c2\u6570\u201d\uff0c\u53c2\u6570\u7ec6\u8c03\u5728\u201c\u7b56\u7565\u89c4\u5219\u53c2\u6570\u201d\u6298\u53e0\u9762\u677f\u91cc\u3002")
+        st.checkbox(
+            "\u8d26\u6237\u5bf9\u9f50\u56de\u6d4b\uff08\u7528\u771f\u5b9e\u6301\u4ed3\u79cd\u5b50\u5316\uff09",
+            value=st.session_state.get("align_backtest_with_account", False),
+            key="align_backtest_with_account",
+            help="\u5f00\u542f\u540e\uff0c\u56de\u6d4b\u8d77\u70b9\u4f1a\u6309\u4f60\u5f53\u524d\u6301\u4ed3\uff08\u80a1\u6570 \u00d7 \u6210\u672c\u4ef7\uff09\u79cd\u5b50\u5316\uff0c\u6a21\u62df\u7b56\u7565\u63a5\u7ba1\u73b0\u6709\u8d26\u6237\u7684\u8868\u73b0\u3002\u4ec5\u4f5c\u53c2\u8003\uff0c\u4e0d\u6539\u53d8\u5386\u53f2\u4fe1\u53f7\u3002",
+        )
+        if st.button(
+            "\U0001F504 \u4e00\u952e\u5237\u65b0\u6301\u4ed3 + \u91cd\u8dd1\u4eca\u65e5\u7b56\u7565",
+            type="primary",
+            width="stretch",
+            help="\u91cd\u65b0\u4ece\u5bcc\u9014\u8bfb\u53d6\u6301\u4ed3\u548c\u8d26\u6237\u8d44\u91d1\uff0c\u7136\u540e\u7acb\u5373\u8dd1\u4e00\u6b21\u5f53\u524d\u6a21\u677f\u7684\u56de\u6d4b\uff0c\u751f\u6210\u6700\u65b0\u884c\u52a8\u8ba1\u5212\u3002",
+        ):
+            try:
+                _refresh_host = st.session_state.get("position_futu_host", "127.0.0.1")
+                _refresh_port = int(st.session_state.get("position_futu_port", 11111))
+                _market_label = st.session_state.get("position_market_label", "\u7f8e\u80a1 US")
+                _env_label = st.session_state.get("position_env_label", "\u771f\u5b9e\u8d26\u6237\uff08\u53ea\u8bfb\uff09")
+                _refresh_market = {"\u7f8e\u80a1 US": "US", "\u6e2f\u80a1 HK": "HK", "A\u80a1 CN": "CN", "\u65b0\u52a0\u5761 SG": "SG"}[_market_label]
+                _refresh_env = "REAL" if _env_label == "\u771f\u5b9e\u8d26\u6237\uff08\u53ea\u8bfb\uff09" else "SIMULATE"
+                _refresh_provider = FutuHistoricalDataProvider(FutuDataConfig(host=_refresh_host, port=_refresh_port, cache_dir=ROOT / "data" / "cache"))
+                _refresh_positions = _refresh_provider.get_positions(market=_refresh_market, trd_env=_refresh_env)
+                if not _refresh_positions.empty:
+                    save_current_positions(_refresh_positions)
+                    st.session_state["_pending_use_current_positions"] = True
+                st.session_state["account_info"] = _refresh_provider.get_account_info(market=_refresh_market, trd_env=_refresh_env)
+                st.session_state["auto_run_backtest"] = True
+                st.session_state["_refresh_toast"] = {
+                    "msg": f"\u5237\u65b0\u6210\u529f\uff1a\u6301\u4ed3 {len(_refresh_positions)} \u6761\u3001\u8d44\u91d1\u5df2\u66f4\u65b0\u3002\u56de\u6d4b\u91cd\u65b0\u8dd1\u4e2d\u2026",
+                    "icon": "\U0001F504",
+                }
+                st.rerun()
+            except Exception as exc:
+                st.session_state["_refresh_toast"] = {
+                    "msg": f"\u5237\u65b0\u5931\u8d25\uff1a{format_futu_exception('\u4e00\u952e\u5237\u65b0', exc)}",
+                    "icon": "\u26a0\ufe0f",
+                }
+                st.rerun()
 
-_auto_run_backtest = st.session_state.pop("auto_run_backtest", False)
-_, _run_box_col, _ = st.columns([1, 3, 1])
-with _run_box_col:
+    _auto_run_backtest = st.session_state.pop("auto_run_backtest", False)
     _run_c1, _run_c2 = st.columns(2)
-    run_default = _run_c1.button("▶ 运行默认回测", type="primary", width="stretch") or _auto_run_backtest
-    run_current = _run_c2.button("运行当前参数回测", width="stretch")
-run_requested = run_default or run_current
+    run_default = _run_c1.button("\u25b6 \u8fd0\u884c\u9ed8\u8ba4\u56de\u6d4b", type="primary", width="stretch") or _auto_run_backtest
+    run_current = _run_c2.button("\u8fd0\u884c\u5f53\u524d\u53c2\u6570", width="stretch")
+    run_requested = run_default or run_current
+
 
 if run_default:
     config = build_config({**default_payload, "default_pool": symbol_pool, "default_backtest_symbols": selected_symbols, "backtest_years": backtest_years, "initial_capital": float(initial_capital)})
@@ -1165,7 +1252,24 @@ ctx = WorkspaceContext(
     append_cockpit_regression=append_cockpit_regression,
     load_cockpit_regressions=load_cockpit_regressions,
 )
+
+# ===== \u5237\u65b0\u9876\u90e8\u72b6\u6001\u6761\uff08\u8986\u76d6\u9996\u5c4f\u521d\u59cb\u503c\uff09 =====
+_history_rows = st.session_state.get("backtest_history", []) or []
+_last_run_text = str(_history_rows[-1].get("\u8fd0\u884c\u65f6\u95f4", "\u2014")) if _history_rows else "\u2014"
+_render_status_bar(
+    account_info=ctx.account_info,
+    strategy_plan_df=ctx.strategy_plan_df,
+    metrics=ctx.result.metrics if ctx.result else {},
+    env_label=ctx.position_env_label,
+    years=ctx.config.backtest_years,
+    stock_pos=int(count_position_rows(ctx.edited_positions_df)) if hasattr(ctx.edited_positions_df, "empty") else 0,
+    opt_pos=len(ctx.option_position_symbols or []),
+    last_run_text=_last_run_text,
+)
+
 if show_simulation:
-    render_simulation_workspace(ctx)
+    with _right_canvas:
+        render_simulation_workspace(ctx)
 else:
-    render_account_workspace(ctx)
+    with _right_canvas:
+        render_account_workspace(ctx)

@@ -494,45 +494,67 @@ def render_account_workspace(ctx: WorkspaceContext) -> None:
             "清仓": ("#DC2626", "#FEE2E2"),
             "观察": ("#2563EB", "#DBEAFE"),
         }
+        _priority_palette = {
+            "立即": ("#DC2626", "#FEE2E2"),
+            "尽快": ("#D97706", "#FEF3C7"),
+            "今日": ("#2563EB", "#DBEAFE"),
+        }
         for _, _row in _top_rows.iterrows():
-            with st.container(border=True):
-                _action_text = str(_row.get("计划动作", "—"))
-                _fg, _bg = next(
-                    (color for key, color in _action_palette.items() if key in _action_text),
-                    ("#475569", "#E2E8F0"),
+            _action_text = str(_row.get("计划动作", "—"))
+            _fg, _bg = next(
+                (color for key, color in _action_palette.items() if key in _action_text),
+                ("#475569", "#E2E8F0"),
+            )
+            _priority_text = str(_row.get("优先级", "") or "—")
+            _pfg, _pbg = next(
+                (color for key, color in _priority_palette.items() if key in _priority_text),
+                ("#475569", "#F1F5F9"),
+            )
+            _amt = _row.get("参考交易金额")
+            _amt_text = "暂不交易" if (_amt is None or pd.isna(_amt)) else _format_money(_amt)
+            _meta_bits = []
+            _shares = _row.get("建议股数")
+            if _shares is not None and pd.notna(_shares):
+                _meta_bits.append(f"{int(_shares)} 股")
+            _gap = _row.get("距关键价位")
+            if _gap is not None and not pd.isna(_gap):
+                _meta_bits.append(f"距关键价位 {float(_gap) * 100:+.2f}%")
+            _status = _row.get("状态")
+            if _status:
+                _meta_bits.append(str(_status))
+            _meta_text = " · ".join(_meta_bits) if _meta_bits else ""
+            _trigger = str(_row.get("触发依据", "") or "")
+            _plan_note = str(_row.get("计划说明", "") or "")
+
+            _detail_lines = []
+            if _trigger:
+                _detail_lines.append(
+                    f"<div style='color:#334155;font-size:0.95rem;margin-top:8px;line-height:1.5;'>"
+                    f"<span style='color:#0F172A;font-weight:600;'>触发</span>：{_trigger}</div>"
                 )
-                _head_c1, _head_c2, _head_c3 = st.columns([3, 1, 1])
-                _head_c1.markdown(
-                    f"""
-                    <div style='display:flex;align-items:center;gap:10px;margin-bottom:2px;'>
-                        <span style='background:{_bg};color:{_fg};padding:3px 12px;border-radius:999px;
-                                     font-weight:700;font-size:0.82rem;letter-spacing:0.3px;'>{_action_text}</span>
-                        <span style='font-size:1.1rem;font-weight:700;color:#0F172A;'>{_row.get('标的', '')}</span>
+            if _plan_note:
+                _detail_lines.append(
+                    f"<div style='color:#64748B;font-size:0.9rem;margin-top:4px;line-height:1.5;'>{_plan_note}</div>"
+                )
+
+            st.markdown(
+                f"""
+                <div style='background:#FFFFFF;border:1px solid #E2E8F0;border-radius:12px;
+                            padding:16px 20px;margin-bottom:12px;box-shadow:0 1px 2px rgba(15,23,42,0.04);'>
+                    <div style='display:flex;align-items:center;flex-wrap:wrap;gap:12px;'>
+                        <span style='background:{_bg};color:{_fg};padding:4px 14px;border-radius:999px;
+                                     font-weight:700;font-size:0.92rem;letter-spacing:0.3px;'>{_action_text}</span>
+                        <span style='font-size:1.25rem;font-weight:700;color:#0F172A;letter-spacing:0.2px;'>{_row.get('标的', '')}</span>
+                        <span style='background:{_pbg};color:{_pfg};padding:4px 12px;border-radius:8px;
+                                     font-weight:600;font-size:0.9rem;'>{_priority_text}</span>
+                        <span style='margin-left:auto;font-weight:700;font-size:1.3rem;color:#0F172A;letter-spacing:0.3px;'>{_amt_text}</span>
                     </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                _head_c2.metric("优先级", str(_row.get("优先级", "")))
-                _amt = _row.get("参考交易金额")
-                _head_c3.metric("参考金额", "暂不交易" if pd.isna(_amt) else _format_money(_amt))
-                _meta_bits = []
-                _shares = _row.get("建议股数")
-                if pd.notna(_shares):
-                    _meta_bits.append(f"建议股数：{int(_shares)}")
-                _gap = _row.get("距关键价位")
-                if _gap is not None and not pd.isna(_gap):
-                    _meta_bits.append(f"距关键价位：{float(_gap) * 100:+.2f}%")
-                _status = _row.get("状态")
-                if _status:
-                    _meta_bits.append(f"状态：{_status}")
-                if _meta_bits:
-                    st.caption(" ｜ ".join(_meta_bits))
-                _trigger = str(_row.get("触发依据", "") or "")
-                if _trigger:
-                    st.markdown(f"**触发依据**：{_trigger}")
-                _plan_note = str(_row.get("计划说明", "") or "")
-                if _plan_note:
-                    st.caption(f"说明：{_plan_note}")
+                    {('<div style="color:#475569;font-size:0.92rem;margin-top:10px;line-height:1.5;">' + _meta_text + '</div>') if _meta_text else ''}
+                    {''.join(_detail_lines)}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
         if len(ctx.strategy_plan_df) > len(_top_rows):
             st.caption(f"还有 {len(ctx.strategy_plan_df) - len(_top_rows)} 条次优先动作，展开下方表格查看。")
         with st.expander("全部行动计划表", expanded=False):
