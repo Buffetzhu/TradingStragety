@@ -634,28 +634,21 @@ def _render_archive_tab(ctx: WorkspaceContext) -> None:
     ]
     _cards_html = ""
     for icon, title, bg, fg, desc in _archive_cards:
-        _cards_html += f"""
-        <div class='archive-card'>
-            <span class='ic' style='background:#{bg};color:#{fg};'>{icon}</span>
-            <div class='body'>
-                <div class='t'>{title}</div>
-                <div class='s'>{desc}</div>
-            </div>
-            <span class='chev'>\u203a</span>
-        </div>
-        """
-    st.markdown(
-        f"""
-        <div class='archive-section'>
-            <div class='arc-title'>
-                <h3>\U0001F4DC \u590d\u76d8\u6863\u6848</h3>
-                <span class='arc-badge'>{len(_archive_cards)}</span>
-                <span class='arc-tip'>\u6863\u6848\u6027\u89c6\u56fe\u96c6\u4e2d\u5165\u53e3\uff1bV0.6 \u6570\u636e\u4ecd\u5728 Cockpit / \u4eca\u65e5\u51b3\u7b56 tab \u4e2d\u3002</span>
-            </div>
-            <div class='archive-grid'>
-                {_cards_html}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+        _cards_html += (
+            f"<div class='archive-card'>"
+            f"<span class='ic' style='background:#{bg};color:#{fg};'>{icon}</span>"
+            f"<div class='body'><div class='t'>{title}</div><div class='s'>{desc}</div></div>"
+            f"<span class='chev'>\u203a</span>"
+            f"</div>"
+        )
+    _archive_html = (
+        "<div class='archive-section'>"
+        "<div class='arc-title'>"
+        f"<h3>\U0001F4DC \u590d\u76d8\u6863\u6848</h3>"
+        f"<span class='arc-badge'>{len(_archive_cards)}</span>"
+        f"<span class='arc-tip'>\u6863\u6848\u6027\u89c6\u56fe\u96c6\u4e2d\u5165\u53e3\uff1bV0.6 \u6570\u636e\u4ecd\u5728 Cockpit / \u4eca\u65e5\u51b3\u7b56 tab \u4e2d\u3002</span>"
+        "</div>"
+        f"<div class='archive-grid'>{_cards_html}</div>"
+        "</div>"
     )
+    st.markdown(_archive_html, unsafe_allow_html=True)
