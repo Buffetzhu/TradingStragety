@@ -601,10 +601,10 @@ st.markdown(
     .status-bar .val.green {color: #4ADE80;}
     .status-bar .val.red {color: #F87171;}
     .status-bar .val.amber {color: #FBBF24;}
-    .status-bar .last-run {text-align: right; color: #CBD5E1; font-size: 0.85rem; line-height: 1.5; padding-top: 38px;}
+    .status-bar .last-run {text-align: right; color: #CBD5E1; font-size: 0.85rem; line-height: 1.5;}
     .status-bar .last-run b {color: #fff; font-size: 0.95rem; font-weight: 700;}
 
-    /* 状态条右上角「🔁 重跑」按钮：贴近状态条并上移覆盖 */
+    /* 状态条下方紧贴的「🔁 重跑」按钮：独立一行，靠右 */
     div[data-testid="stElementContainer"]:has(.status-rerun-anchor) {
         height: 0 !important;
         margin: 0 !important;
@@ -613,20 +613,18 @@ st.markdown(
     }
     div[data-testid="stElementContainer"]:has(.status-rerun-anchor) + div[data-testid="stLayoutWrapper"],
     div[data-testid="stElementContainer"]:has(.status-rerun-anchor) + div[data-testid="stHorizontalBlock"] {
-        margin-top: -178px !important;
-        margin-bottom: 70px !important;
-        position: relative;
-        z-index: 10;
-        padding-right: 26px;
+        margin-top: -8px !important;
+        margin-bottom: 6px !important;
+        padding-right: 4px;
     }
     div[data-testid="stElementContainer"]:has(.status-rerun-anchor) + div [data-testid="stButton"] button {
         background: #2563EB !important;
         color: #fff !important;
         border: 1px solid #1D4ED8 !important;
-        height: 34px !important;
-        min-height: 34px !important;
-        padding: 0 16px !important;
-        font-size: 0.85rem !important;
+        height: 36px !important;
+        min-height: 36px !important;
+        padding: 0 18px !important;
+        font-size: 0.88rem !important;
         font-weight: 600 !important;
         border-radius: 8px !important;
         box-shadow: 0 2px 6px rgba(37,99,235,0.30);
@@ -832,7 +830,7 @@ show_simulation = workspace_mode.endswith("\u6a21\u62df\u7814\u7a76")
 _status_bar_placeholder = st.empty()
 # 状态条右上角「🔁 重跑」按钮（只创建一次，通过 CSS 上移贴到状态条右上角）
 st.markdown("<div class='status-rerun-anchor'></div>", unsafe_allow_html=True)
-_sba_cols = st.columns([8.5, 1.0])
+_sba_cols = st.columns([10.5, 1.0])
 with _sba_cols[1]:
     if st.button("🔁 重跑", key="status_bar_rerun_btn", width="stretch", help="刷新行情缓存并重跑默认回测"):
         st.session_state["_force_refresh_market_cache"] = True
