@@ -1,0 +1,24 @@
+# Cloudflare Tunnel 配置模板
+# 部署到 ~/.cloudflared/config.yml 后生效。
+# 字段说明：
+#   tunnel       : 由 `cloudflared tunnel create trading` 命令生成的 UUID
+#   credentials-file: tunnel create 时生成的 JSON 凭证，路径固定在 ~/.cloudflared/<uuid>.json
+#   ingress      : 路由规则，按顺序匹配；最后必须有一条 service: http_status:404 兜底
+#
+# 一次性建立步骤见 deploy/README.md。
+
+tunnel: __REPLACE_WITH_TUNNEL_UUID__
+credentials-file: /Users/__YOUR_USERNAME__/.cloudflared/__REPLACE_WITH_TUNNEL_UUID__.json
+
+ingress:
+  # 你自己的域名（推荐）：先去 Cloudflare 添加一个域名，然后
+  # `cloudflared tunnel route dns trading trading.example.com`
+  - hostname: trading.example.com
+    service: http://127.0.0.1:8501
+    originRequest:
+      # Streamlit 用 websocket 做服务端推送，必须开
+      noTLSVerify: true
+      connectTimeout: 30s
+
+  # 兜底
+  - service: http_status:404
