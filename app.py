@@ -601,8 +601,40 @@ st.markdown(
     .status-bar .val.green {color: #4ADE80;}
     .status-bar .val.red {color: #F87171;}
     .status-bar .val.amber {color: #FBBF24;}
-    .status-bar .last-run {text-align: right; color: #CBD5E1; font-size: 0.85rem; line-height: 1.5;}
+    .status-bar .last-run {text-align: right; color: #CBD5E1; font-size: 0.85rem; line-height: 1.5; padding-top: 38px;}
     .status-bar .last-run b {color: #fff; font-size: 0.95rem; font-weight: 700;}
+
+    /* 状态条右上角「🔁 重跑」按钮：贴近状态条并上移覆盖 */
+    div[data-testid="stElementContainer"]:has(.status-rerun-anchor) {
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+    }
+    div[data-testid="stElementContainer"]:has(.status-rerun-anchor) + div[data-testid="stLayoutWrapper"],
+    div[data-testid="stElementContainer"]:has(.status-rerun-anchor) + div[data-testid="stHorizontalBlock"] {
+        margin-top: -178px !important;
+        margin-bottom: 70px !important;
+        position: relative;
+        z-index: 10;
+        padding-right: 26px;
+    }
+    div[data-testid="stElementContainer"]:has(.status-rerun-anchor) + div [data-testid="stButton"] button {
+        background: #2563EB !important;
+        color: #fff !important;
+        border: 1px solid #1D4ED8 !important;
+        height: 34px !important;
+        min-height: 34px !important;
+        padding: 0 16px !important;
+        font-size: 0.85rem !important;
+        font-weight: 600 !important;
+        border-radius: 8px !important;
+        box-shadow: 0 2px 6px rgba(37,99,235,0.30);
+    }
+    div[data-testid="stElementContainer"]:has(.status-rerun-anchor) + div [data-testid="stButton"] button:hover {
+        background: #1D4ED8 !important;
+        box-shadow: 0 4px 10px rgba(37,99,235,0.40);
+    }
 
     /* ======== \u5361\u7247\u6837\u5f0f\uff08st.container(border=True)\uff09 ======== */
     [data-testid="stVerticalBlockBorderWrapper"] {
@@ -798,6 +830,14 @@ show_simulation = workspace_mode.endswith("\u6a21\u62df\u7814\u7a76")
 
 # ===== \u72b6\u6001\u6761\u5360\u4f4d\uff08\u5728\u56de\u6d4b\u4e0e\u8d26\u6237\u6570\u636e\u52a0\u8f7d\u540e\u586b\u5145\uff09 =====
 _status_bar_placeholder = st.empty()
+# 状态条右上角「🔁 重跑」按钮（只创建一次，通过 CSS 上移贴到状态条右上角）
+st.markdown("<div class='status-rerun-anchor'></div>", unsafe_allow_html=True)
+_sba_cols = st.columns([8.5, 1.0])
+with _sba_cols[1]:
+    if st.button("🔁 重跑", key="status_bar_rerun_btn", width="stretch", help="刷新行情缓存并重跑默认回测"):
+        st.session_state["_force_refresh_market_cache"] = True
+        st.session_state["auto_run_backtest"] = True
+        st.rerun()
 _refresh_toolbar_placeholder = st.empty()
 
 
@@ -872,7 +912,7 @@ def _render_status_bar(
             <div class='stat'><span class='lbl'>\u884c\u52a8\u8ba1\u5212</span><span class='val amber'>{plan_count} \u4ef6</span><span class='sub'>{plan_urgent} \u7acb\u5373 \u00b7 {plan_soon} \u5c3d\u5feb \u00b7 {plan_today} \u4eca\u65e5</span></div>
             <div class='stat'><span class='lbl'>\u7b56\u7565\u6536\u76ca</span><span class='val {total_return_cls}'>{total_return_text}</span><span class='sub'>\u56de\u6d4b\u5468\u671f {years_text}</span></div>
             <div class='stat'><span class='lbl'>\u6700\u5927\u56de\u64a4 / Sharpe</span><span class='val red'>{max_dd_text}</span><span class='sub'>Sharpe {sharpe_text}</span></div>
-            <div class='last-run'>\u6700\u8fd1\u56de\u6d4b<br><b>{last_run_text}</b><br><span style='color:#94A3B8;font-size:0.78rem;'>\u70b9\u51fb\u4e0b\u65b9\u91cd\u8dd1</span></div>
+            <div class='last-run'>\u6700\u8fd1\u56de\u6d4b<br><b>{last_run_text}</b></div>
         </div>
         """,
         unsafe_allow_html=True,
