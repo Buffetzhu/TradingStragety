@@ -2,7 +2,7 @@
 
 AI 趋势交易策略工作台。项目按 `CLAUDE.md` 中的 `Playbooks -> Scripts` 两层框架组织。
 
-当前版本：0.5。开发进度和下一步计划见 `DEVELOPMENT_LOG.md`。
+当前版本：0.8。开发进度和下一步计划见 `DEVELOPMENT_LOG.md`。远程部署清单见 `deploy/README.md`。
 
 ## V1 目标
 
