@@ -623,11 +623,17 @@ st.markdown(
         border: 1px solid #1D4ED8 !important;
         height: 36px !important;
         min-height: 36px !important;
-        padding: 0 18px !important;
+        padding: 0 12px !important;
         font-size: 0.88rem !important;
         font-weight: 600 !important;
         border-radius: 8px !important;
+        white-space: nowrap !important;
         box-shadow: 0 2px 6px rgba(37,99,235,0.30);
+    }
+    div[data-testid="stElementContainer"]:has(.status-rerun-anchor) + div [data-testid="stButton"] button p,
+    div[data-testid="stElementContainer"]:has(.status-rerun-anchor) + div [data-testid="stButton"] button div {
+        white-space: nowrap !important;
+        overflow: visible !important;
     }
     div[data-testid="stElementContainer"]:has(.status-rerun-anchor) + div [data-testid="stButton"] button:hover {
         background: #1D4ED8 !important;
@@ -830,7 +836,7 @@ show_simulation = workspace_mode.endswith("\u6a21\u62df\u7814\u7a76")
 _status_bar_placeholder = st.empty()
 # 状态条右上角「🔁 重跑」按钮（只创建一次，通过 CSS 上移贴到状态条右上角）
 st.markdown("<div class='status-rerun-anchor'></div>", unsafe_allow_html=True)
-_sba_cols = st.columns([10.5, 1.0])
+_sba_cols = st.columns([9.0, 1.6])
 with _sba_cols[1]:
     if st.button("🔁 重跑", key="status_bar_rerun_btn", width="stretch", help="刷新行情缓存并重跑默认回测"):
         st.session_state["_force_refresh_market_cache"] = True
