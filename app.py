@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import re
@@ -514,6 +515,37 @@ st.set_page_config(
         "About": "AI 趋势交易策略工作台 · 本地只读，富途真账户仅查不下单。",
     },
 )
+
+
+def require_access_password() -> None:
+    password = str(st.secrets.get("APP_ACCESS_PASSWORD", os.getenv("APP_ACCESS_PASSWORD", ""))).strip()
+    if not password:
+        return
+
+    if st.session_state.get("_access_granted", False):
+        with st.sidebar:
+            st.caption("已启用访问密码")
+            if st.button("退出登录", width="stretch"):
+                st.session_state["_access_granted"] = False
+                st.rerun()
+        return
+
+    st.title("访问验证")
+    st.caption("请输入访问密码后继续。")
+    entered = st.text_input("访问密码", type="password", key="_access_password_input")
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        if st.button("进入系统", type="primary", width="stretch"):
+            if hmac.compare_digest(entered, password):
+                st.session_state["_access_granted"] = True
+                st.rerun()
+            st.error("密码错误，请重试。")
+    with col2:
+        st.info("提示：在部署环境里设置 APP_ACCESS_PASSWORD 即可开启此功能。")
+    st.stop()
+
+
+require_access_password()
 
 # ===== 全局视觉打磨 =====
 st.markdown(

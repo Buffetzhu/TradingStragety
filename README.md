@@ -15,6 +15,14 @@ bash scripts/start_private_access.sh
 ```
 
 - 详细说明见 `deploy/README.md`。
+- 如需“网页打开先输密码”，可配置访问密码：
+
+```bash
+export APP_ACCESS_PASSWORD='请改成强密码'
+bash scripts/start_private_access.sh
+```
+
+- 也可写入 `.streamlit/secrets.toml` 的 `APP_ACCESS_PASSWORD`。
 
 ## V1 目标
 
