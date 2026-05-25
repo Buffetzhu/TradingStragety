@@ -4,6 +4,18 @@ AI 趋势交易策略工作台。项目按 `CLAUDE.md` 中的 `Playbooks -> Scri
 
 当前版本：0.8。开发进度和下一步计划见 `DEVELOPMENT_LOG.md`。远程部署清单见 `deploy/README.md`。
 
+## 隐私优先部署（推荐）
+
+- 默认建议采用本地私有部署，不把 OpenD 暴露到公网。
+- 手机访问优先使用同一 Wi-Fi 局域网地址，或使用 Tailscale 私网地址。
+- 一键启动命令：
+
+```bash
+bash scripts/start_private_access.sh
+```
+
+- 详细说明见 `deploy/README.md`。
+
 ## V1 目标
 
 - 内置 `GPT_Trend_Default_v1` 默认策略

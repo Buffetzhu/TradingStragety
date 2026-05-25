@@ -1,6 +1,40 @@
-# Macbook 远程部署清单
+# Macbook 部署清单（私有优先）
 
-把家里的 Macbook 改造成"24h 在线 + 公网可访问"的交易工作台。
+把家里的 Macbook 改造成"24h 在线 + 私网可访问"的交易工作台。
+
+## 推荐方案（隐私优先）
+
+目标：不把 OpenD 暴露到公网，同时支持手机访问。
+
+### 架构
+
+```
+Macbook
+      ├── Futu OpenD (127.0.0.1:11111，仅本机)
+      └── Streamlit (0.0.0.0:8501)
+                        ├── 本机:      http://127.0.0.1:8501
+                        ├── 同 Wi-Fi:  http://<Mac_LAN_IP>:8501
+                        └── Tailscale: http://<Mac_Tailscale_IP>:8501 (可选)
+```
+
+### 一键启动（本机私有）
+
+```bash
+cd ~/code/TradingStragety
+bash scripts/start_private_access.sh
+```
+
+脚本会打印三类地址：本机地址、局域网地址、Tailscale 私网地址（若已安装）。
+
+### 隐私边界
+
+- 不要对 OpenD 端口 11111 做任何公网映射。
+- 不使用 Pinggy / Cloudflare Quick Tunnel 代理 OpenD。
+- 仅开放 8501 给局域网或 Tailscale 私网访问。
+
+---
+
+下面内容保留为“公网访问”方案，仅在你明确接受公网暴露风险时使用。
 
 ## 架构
 

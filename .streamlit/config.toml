@@ -13,13 +13,13 @@ toolbarMode = "minimal"
 [browser]
 gatherUsageStats = false
 
-# 远程访问相关：绑定所有网卡，便于通过 Tailscale 私有网络直接访问。
-# 关闭 XSRF/CORS 以兼容 Tailscale 和其他反向代理场景。
+# 私有访问相关：绑定所有网卡，便于局域网和 Tailscale 私网访问。
+# 开启 XSRF/CORS，避免浏览器跨站请求带来的额外风险。
 [server]
 headless = true
 address = "0.0.0.0"
 port = 8501
-enableXsrfProtection = false
-enableCORS = false
+enableXsrfProtection = true
+enableCORS = true
 runOnSave = false
 
