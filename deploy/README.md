@@ -34,6 +34,20 @@ bash scripts/start_private_access.sh
 
 说明：设置后，手机或浏览器打开页面会先看到密码输入框，输入正确才可访问主界面。
 
+### 一键启动（外网免客户端 + 网页密码）
+
+```bash
+cd ~/code/TradingStragety
+export APP_ACCESS_PASSWORD='请改成强密码'
+bash scripts/start_public_password_access.sh
+```
+
+说明：
+- 不需要安装 Tailscale，任意网络只用浏览器即可访问。
+- 启动后会得到 `https://*.trycloudflare.com` 地址。
+- 访问时先输入密码，验证通过后进入应用。
+- 仅暴露 Web 入口，OpenD 仍留在本机 `127.0.0.1:11111`。
+
 脚本会打印三类地址：本机地址、局域网地址、Tailscale 私网地址（若已安装）。
 
 ### 隐私边界

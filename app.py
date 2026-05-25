@@ -1157,7 +1157,7 @@ with _cfg_box:
         symbol_pool = normalize_app_symbols([*payload["default_pool"], *manual_symbols])
     with st.expander("📡 数据接入", expanded=False):
         data_source_options = ["演示数据", "富途真实行情"]
-        default_data_source = os.getenv("DEFAULT_DATA_SOURCE", "演示数据")
+        default_data_source = os.getenv("DEFAULT_DATA_SOURCE", "富途真实行情")
         default_data_source_index = 1 if default_data_source == "富途真实行情" else 0
         data_source = st.radio("数据源", options=data_source_options, index=default_data_source_index, horizontal=True)
         futu_host = "127.0.0.1"
@@ -1176,7 +1176,7 @@ with _cfg_box:
                 else:
                     st.error(message)
         if show_account:
-            st.caption("默认使用演示数据；如需真实行情，请手动填写 OpenD 地址和端口后切换。")
+            st.caption("账户模式下默认使用富途真实行情；若 OpenD 暂不可达，可切换到演示数据。")
     with st.expander("⚙️ 策略规则参数", expanded=False):
         ma_short = st.number_input("MA 短周期", min_value=5, max_value=100, value=int(payload["ma_short"]))
         ma_long = st.number_input("MA 长周期", min_value=10, max_value=250, value=int(payload["ma_long"]))

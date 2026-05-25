@@ -24,6 +24,19 @@ bash scripts/start_private_access.sh
 
 - 也可写入 `.streamlit/secrets.toml` 的 `APP_ACCESS_PASSWORD`。
 
+## 外网访问（免安装客户端）
+
+如果你希望在任何网络环境下访问，并且只通过网页密码放行：
+
+```bash
+export APP_ACCESS_PASSWORD='请改成强密码'
+bash scripts/start_public_password_access.sh
+```
+
+- 脚本会打印一个 `https://*.trycloudflare.com` 外网地址。
+- 手机或电脑在外网打开该地址，输入正确密码即可访问。
+- 该方案只暴露 Web 端口 8501，OpenD 仍保持本机 `127.0.0.1:11111`。
+
 ## V1 目标
 
 - 内置 `GPT_Trend_Default_v1` 默认策略
