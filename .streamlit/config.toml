@@ -13,11 +13,11 @@ toolbarMode = "minimal"
 [browser]
 gatherUsageStats = false
 
-# 远程部署相关：cloudflared 隧道在本机连 127.0.0.1:8501，不需要对外暴露端口。
-# 关闭 XSRF 是因为通过 Cloudflare Tunnel 反向代理时来源域名会变化。
+# 远程访问相关：绑定所有网卡，便于通过 Tailscale 私有网络直接访问。
+# 关闭 XSRF/CORS 以兼容 Tailscale 和其他反向代理场景。
 [server]
 headless = true
-address = "127.0.0.1"
+address = "0.0.0.0"
 port = 8501
 enableXsrfProtection = false
 enableCORS = false
