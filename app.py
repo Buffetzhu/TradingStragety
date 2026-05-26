@@ -557,7 +557,7 @@ st.markdown(
     html, body, .stApp {background: #F1F5F9 !important;}
     .main .block-container, [data-testid="stMainBlockContainer"] {
         max-width: 1440px !important;
-        padding-top: 1.2rem !important;
+        padding-top: 1.8rem !important;
         padding-left: 1.5rem !important;
         padding-right: 1.5rem !important;
         padding-bottom: 4rem !important;
@@ -596,6 +596,30 @@ st.markdown(
     .meta-chip strong {white-space: nowrap;}
     .meta-chip.live {background: #DCFCE7; color: #15803D; border-color: #BBF7D0;}
     .meta-chip .dot {width: 6px; height: 6px; border-radius: 999px; background: currentColor;}
+
+    /* 顶部品牌区：避免固定高度导致标题在部分字体下被裁切 */
+    .app-brand-wrap {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-height: 68px;
+        padding: 6px 0;
+        overflow: visible;
+    }
+    .app-brand-title {
+        font-size: 1.08rem;
+        font-weight: 700;
+        color: #0F172A;
+        line-height: 1.22;
+        white-space: nowrap;
+    }
+    .app-brand-subtitle {
+        font-size: 0.78rem;
+        color: #64748B;
+        margin-top: 3px;
+        line-height: 1.35;
+        white-space: nowrap;
+    }
 
     /* \u5de5\u4f5c\u6a21\u5f0f radio \u6539\u9020\u6210 segmented control */
     div[role="radiogroup"][aria-label="workspace_mode_radio"] {
@@ -825,12 +849,12 @@ _nav_brand, _nav_mode, _nav_chips = st.columns([2.8, 3.0, 4.2])
 with _nav_brand:
     st.markdown(
         """
-        <div style='display:flex;align-items:center;gap:12px;height:68px;'>
+        <div class='app-brand-wrap'>
             <span style='width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,#2563EB,#60A5FA);
                          color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:1.05rem;'>AT</span>
             <div>
-                <div style='font-size:1.08rem;font-weight:700;color:#0F172A;line-height:1.15;white-space:nowrap;'>\U0001F4C8 AI \u8d8b\u52bf\u4ea4\u6613\u7b56\u7565\u5de5\u4f5c\u53f0</div>
-                <div style='font-size:0.78rem;color:#64748B;margin-top:3px;white-space:nowrap;'>\u672c\u5730\u53ea\u8bfb \u00b7 \u5bcc\u9014\u771f\u8d26\u6237\u9ed8\u8ba4\u4e0d\u89e3\u9501\u3001\u4e0d\u81ea\u52a8\u4e0b\u5355</div>
+                <div class='app-brand-title'>\U0001F4C8 AI \u8d8b\u52bf\u4ea4\u6613\u7b56\u7565\u5de5\u4f5c\u53f0</div>
+                <div class='app-brand-subtitle'>\u672c\u5730\u53ea\u8bfb \u00b7 \u5bcc\u9014\u771f\u8d26\u6237\u9ed8\u8ba4\u4e0d\u89e3\u9501\u3001\u4e0d\u81ea\u52a8\u4e0b\u5355</div>
             </div>
         </div>
         """,
@@ -1583,6 +1607,9 @@ ctx = WorkspaceContext(
     load_cockpit_reviews=load_cockpit_reviews,
     append_cockpit_regression=append_cockpit_regression,
     load_cockpit_regressions=load_cockpit_regressions,
+    futu_host=str(st.session_state.get("position_futu_host", "127.0.0.1")),
+    futu_port=int(st.session_state.get("position_futu_port", 11111)),
+    futu_cache_dir=ROOT / "data" / "cache",
 )
 
 # ===== \u5237\u65b0\u9876\u90e8\u72b6\u6001\u6761\uff08\u8986\u76d6\u9996\u5c4f\u521d\u59cb\u503c\uff09 =====

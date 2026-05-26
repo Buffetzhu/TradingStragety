@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
+import time
 from typing import Any, Callable
 
 import pandas as pd
@@ -35,7 +37,10 @@ from trend_option_backtest.models import BacktestResult, StrategyConfig
 from trend_option_backtest.planning import (
     filter_unmatched_option_legs,
     get_position_symbols,
+    normalize_app_symbols,
 )
+from trend_option_backtest.providers.futu_provider import FutuDataConfig, FutuHistoricalDataProvider
+from trend_option_backtest.screening import build_discovery_frame, split_discovery_frame
 from trend_option_backtest.strategies.trend_following import TrendFollowingStrategy
 
 
@@ -132,6 +137,9 @@ class WorkspaceContext:
     capital_value: float
     data_source: str
     app_version: str
+    futu_host: str
+    futu_port: int
+    futu_cache_dir: Path
     # 持久化回调（保持 CSV 路径在 app.py 集中管理）
     append_cockpit_snapshot: Callable[[dict[str, Any]], pd.DataFrame]
     load_cockpit_snapshots: Callable[[], pd.DataFrame]
@@ -276,10 +284,11 @@ def render_simulation_workspace(ctx: WorkspaceContext) -> None:
 
 
 def render_account_workspace(ctx: WorkspaceContext) -> None:
-    """账户追踪工作区：4 tab 主画布（今日决策 / 账户快照 / Cockpit / 复盘档案）。"""
-    _tab_today, _tab_status, _tab_cockpit, _tab_archive = st.tabs([
+    """账户追踪工作区：主画布（今日决策 / 账户快照 / 标的发掘 / Cockpit / 复盘档案）。"""
+    _tab_today, _tab_status, _tab_discovery, _tab_cockpit, _tab_archive = st.tabs([
         "📋 今日决策",
         "📊 账户快照",
+        "🔍 标的发掘",
         "🎛 Cockpit",
         "📜 复盘档案",
     ])
@@ -287,10 +296,250 @@ def render_account_workspace(ctx: WorkspaceContext) -> None:
         _render_today_tab(ctx)
     with _tab_status:
         _render_status_tab(ctx)
+    with _tab_discovery:
+        _render_discovery_tab(ctx)
     with _tab_cockpit:
         _render_cockpit_tab(ctx)
     with _tab_archive:
         _render_archive_tab(ctx)
+
+
+def _format_price(value: object, symbol: str) -> str:
+    if value is None or pd.isna(value):
+        return "N/A"
+    currency = "HK$" if str(symbol).upper().startswith("HK.") else "$"
+    return f"{currency}{float(value):,.2f}"
+
+
+def _render_signal_radar(row: pd.Series) -> None:
+    labels = ["趋势", "突破", "量能", "共振", "温度", "风险"]
+    values = [
+        1.0 if bool(row.get("均线趋势")) else 0.35,
+        1.0 if bool(row.get("价格突破")) else 0.35,
+        1.0 if bool(row.get("成交量确认")) else 0.35,
+        1.0 if bool(row.get("行业共振")) else 0.35,
+        1.0 if bool(row.get("未过热")) else 0.35,
+        max(0.25, min(1.0, 1 - abs(float(row.get("距入场参考", 0.0))))),
+    ]
+    fig = go.Figure(
+        data=[
+            go.Scatterpolar(
+                r=[*values, values[0]],
+                theta=[*labels, labels[0]],
+                fill="toself",
+                line=dict(color="#2563EB", width=2),
+                fillcolor="rgba(37,99,235,0.18)",
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        ]
+    )
+    fig.update_layout(
+        height=190,
+        margin=dict(l=8, r=8, t=8, b=8),
+        polar=dict(radialaxis=dict(visible=False, range=[0, 1]), angularaxis=dict(tickfont=dict(size=11))),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+    )
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+
+
+def _render_discovery_symbol_card(row: pd.Series) -> None:
+    symbol = str(row.get("标的", ""))
+    score = int(row.get("综合评分", 0))
+    badge_bg = "#DCFCE7" if score >= 5 else "#DBEAFE"
+    badge_fg = "#166534" if score >= 5 else "#1D4ED8"
+    with st.container(border=True):
+        st.markdown(
+            f"""
+            <div style='display:flex;justify-content:space-between;gap:12px;align-items:flex-start;'>
+              <div style='min-width:0;'>
+                <div style='font-size:1.28rem;font-weight:900;color:#0F172A;letter-spacing:-0.03em;'>{symbol}</div>
+                <div style='font-size:0.82rem;color:#64748B;font-weight:700;margin-top:4px;'>{row.get('分组', '')} · 收盘 {_format_price(row.get('收盘价'), symbol)}</div>
+              </div>
+              <div style='background:{badge_bg};color:{badge_fg};border-radius:999px;padding:5px 12px;font-size:0.78rem;font-weight:900;white-space:nowrap;'>{score} / 5 {row.get('接近程度', '')}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        chart_col, detail_col = st.columns([1.0, 1.55], gap="small")
+        with chart_col:
+            _render_signal_radar(row)
+        with detail_col:
+            signal_labels = []
+            for label in ["均线趋势", "价格突破", "成交量确认", "行业共振", "未过热"]:
+                is_on = bool(row.get(label))
+                bg = "#DCFCE7" if is_on else "#F8FAFC"
+                fg = "#166534" if is_on else "#64748B"
+                bd = "#BBF7D0" if is_on else "#E2E8F0"
+                signal_labels.append(f"<span style='background:{bg};color:{fg};border:1px solid {bd};border-radius:999px;padding:4px 9px;font-size:0.76rem;font-weight:800;white-space:nowrap;'>{label}</span>")
+            st.markdown(f"<div style='display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 12px;'>{''.join(signal_labels)}</div>", unsafe_allow_html=True)
+            price_cols = st.columns(2)
+            values = [
+                ("入场参考", _format_price(row.get("入场参考价"), symbol), "#0F172A"),
+                ("止损参考", _format_price(row.get("止损参考价"), symbol), "#DC2626"),
+                ("止盈参考", _format_price(row.get("止盈参考价"), symbol), "#15803D"),
+                ("首仓金额", _format_money(row.get("首仓参考金额")), "#1D4ED8"),
+            ]
+            for index, (label, value, color) in enumerate(values):
+                with price_cols[index % 2]:
+                    st.markdown(
+                        f"""
+                        <div style='background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:8px 10px;margin-bottom:8px;min-width:0;'>
+                          <div style='font-size:0.72rem;color:#64748B;font-weight:700;'>{label}</div>
+                          <div style='font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:1rem;font-weight:900;color:{color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>{value}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+
+def _render_discovery_group_columns(others_df: pd.DataFrame) -> None:
+    if others_df.empty:
+        st.success("没有未命中的观察标的。")
+        return
+    group_names = others_df["分组"].dropna().map(str).drop_duplicates().tolist()
+    columns = st.columns(min(3, max(1, len(group_names))))
+    for index, group_name in enumerate(group_names):
+        group_df = others_df[others_df["分组"].map(str) == group_name].sort_values(["综合评分", "距入场参考", "标的"], ascending=[False, False, True]).reset_index(drop=True)
+        with columns[index % len(columns)]:
+            top_note = str(group_df.iloc[0].get("提前关注点", "")) if not group_df.empty else ""
+            st.markdown(
+                f"""
+                <div title='{top_note}' style='background:#FFFFFF;border:1px solid #E2E8F0;border-radius:12px;padding:12px;margin-bottom:10px;'>
+                  <div style='display:flex;justify-content:space-between;gap:8px;align-items:flex-start;'>
+                    <div>
+                      <div style='font-size:0.95rem;font-weight:900;color:#0F172A;'>{group_name}</div>
+                      <div style='font-size:0.75rem;color:#64748B;font-weight:700;margin-top:3px;'>{len(group_df)} 只 · 按接近度排序</div>
+                    </div>
+                    <span style='width:20px;height:20px;border-radius:999px;background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE;display:inline-flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:900;'>i</span>
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            for _, row in group_df.head(5).iterrows():
+                score = int(row.get("综合评分", 0))
+                tag_bg = "#FEF3C7" if score >= 3 else "#E0F2FE" if score == 2 else "#F1F5F9"
+                tag_fg = "#B45309" if score >= 3 else "#0369A1" if score == 2 else "#64748B"
+                st.markdown(
+                    f"""
+                    <div title='{row.get('提前关注点', '')}' style='background:#FFFFFF;border:1px solid #E2E8F0;border-radius:10px;padding:10px;margin-bottom:8px;'>
+                      <div style='display:flex;justify-content:space-between;gap:8px;align-items:center;'>
+                        <div style='font-size:0.92rem;font-weight:900;color:#0F172A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>{row.get('标的', '')}</div>
+                        <span style='background:{tag_bg};color:{tag_fg};border-radius:999px;padding:3px 8px;font-size:0.72rem;font-weight:900;white-space:nowrap;'>{row.get('接近程度', '')}</span>
+                      </div>
+                      <div style='font-size:0.78rem;color:#334155;font-weight:800;line-height:1.45;margin-top:7px;'>{row.get('转入场条件', '')}</div>
+                      <div style='font-size:0.72rem;color:#64748B;font-weight:700;margin-top:4px;'>距入场 {float(row.get('距入场参考', 0.0)) * 100:+.2f}% · {score}/5</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+
+def _render_discovery_tab(ctx: WorkspaceContext) -> None:
+    st.subheader("标的发掘")
+    st.caption("从富途自选股里筛出当前最接近策略入场条件的标的。只读取自选股和行情，不会下单。")
+
+    provider = FutuHistoricalDataProvider(FutuDataConfig(host=ctx.futu_host, port=int(ctx.futu_port), cache_dir=ctx.futu_cache_dir))
+    controls = st.container(border=True)
+    with controls:
+        col1, col2, col3 = st.columns([1.2, 1.2, 2.2])
+        if col1.button("📥 读取自选股", width="stretch", key="discovery_load_watchlists"):
+            now_ts = time.time()
+            last_read_ts = float(st.session_state.get("discovery_watchlist_loaded_at", 0.0) or 0.0)
+            cached_groups = st.session_state.get("discovery_watchlist_groups", {})
+            cooldown_seconds = 30.0
+            try:
+                if cached_groups and now_ts - last_read_ts < cooldown_seconds:
+                    remain = max(0.0, cooldown_seconds - (now_ts - last_read_ts))
+                    st.info(f"读取过于频繁，已使用最近一次自选股结果（建议 {remain:.1f} 秒后再拉取）。")
+                else:
+                    with st.spinner("正在按富途频率限制读取自选股，分组较多时可能需要等待 30 秒左右..."):
+                        groups = provider.get_watchlist_symbols()
+                    st.session_state["discovery_watchlist_groups"] = groups
+                    st.session_state["discovery_selected_groups"] = list(groups.keys())
+                    st.session_state["discovery_watchlist_loaded_at"] = now_ts
+                    st.success(f"已读取 {len(groups)} 个自选股分组。")
+            except Exception as exc:  # noqa: BLE001
+                message = str(exc)
+                if "频率" in message and cached_groups:
+                    st.warning("触发富途频率限制，已保留上次读取的自选股结果，请稍后再试。")
+                elif "频率" in message:
+                    st.error("读取自选股失败：触发富途接口频率限制，请等待约 30 秒后重试。")
+                else:
+                    st.error(f"读取自选股失败：{exc}")
+        watchlist_groups = st.session_state.get("discovery_watchlist_groups", {})
+        group_options = list(watchlist_groups.keys())
+        saved_groups = [group for group in st.session_state.get("discovery_selected_groups", group_options) if group in group_options]
+        if not saved_groups and group_options:
+            saved_groups = group_options
+        st.session_state["discovery_selected_groups"] = saved_groups
+        selected_groups = col3.multiselect(
+            "筛选分组",
+            options=group_options,
+            default=saved_groups,
+            key="discovery_selected_groups",
+            label_visibility="collapsed",
+            placeholder="先读取自选股分组",
+        )
+        if col2.button("🔎 刷新筛选", width="stretch", key="discovery_run_screen"):
+            selected_watchlists = {group: watchlist_groups.get(group, []) for group in selected_groups}
+            symbols = normalize_app_symbols([symbol for symbols in selected_watchlists.values() for symbol in symbols])
+            if not symbols:
+                st.warning("请先读取并选择至少一个自选股分组。")
+            else:
+                with st.spinner("正在读取行情并筛选自选股..."):
+                    market_data, data_errors = provider.get_market_data_with_errors(
+                        symbols,
+                        sector_symbol=ctx.config.sector_symbol,
+                        years=ctx.config.backtest_years,
+                        warmup_days=ctx.config.indicator_warmup_days,
+                        use_cache=True,
+                    )
+                    result_df = build_discovery_frame(selected_watchlists, market_data, ctx.config, plan_capital=ctx.capital_value)
+                    st.session_state["discovery_result_df"] = result_df
+                    st.session_state["discovery_data_errors"] = data_errors
+                st.success(f"筛选完成：{len(result_df)} 只标的可分析。")
+
+    result_df = st.session_state.get("discovery_result_df", pd.DataFrame())
+    data_errors = st.session_state.get("discovery_data_errors", {})
+    if isinstance(data_errors, dict) and data_errors:
+        with st.expander(f"行情读取失败 {len(data_errors)} 只", expanded=False):
+            st.dataframe(pd.DataFrame([{"标的": symbol, "错误": error} for symbol, error in data_errors.items()]), width="stretch", hide_index=True)
+    if not isinstance(result_df, pd.DataFrame) or result_df.empty:
+        st.info("读取富途自选股并点击“刷新筛选”后，这里会优先展示符合入场条件的标的。")
+        return
+
+    hits_df, others_df = split_discovery_frame(result_df)
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("参与筛选", len(result_df))
+    metric_cols[1].metric("符合入场", len(hits_df))
+    metric_cols[2].metric("接近触发", int((others_df["综合评分"] == 3).sum()) if not others_df.empty else 0)
+    metric_cols[3].metric("自选分组", result_df["分组"].nunique())
+
+    st.markdown("#### 符合入场条件")
+    if hits_df.empty:
+        st.warning("当前没有评分达到 4/5 的入场候选。可以展开下方分组查看最接近触发的标的。")
+    else:
+        card_cols = st.columns(2)
+        for index, (_, row) in enumerate(hits_df.iterrows()):
+            with card_cols[index % 2]:
+                _render_discovery_symbol_card(row)
+
+        selected_hit_symbols = st.multiselect("加入回测标的池", options=hits_df["标的"].tolist(), default=hits_df["标的"].tolist(), key="discovery_add_symbols")
+        if st.button("加入回测标的池", width="stretch", key="discovery_add_pool_btn"):
+            current_payload = ctx.config.to_dict()
+            updated_pool = normalize_app_symbols([*current_payload.get("default_pool", []), *selected_hit_symbols])
+            updated_symbols = normalize_app_symbols([*current_payload.get("default_backtest_symbols", []), *selected_hit_symbols])
+            current_payload["default_pool"] = updated_pool
+            current_payload["default_backtest_symbols"] = updated_symbols
+            st.session_state["config_payload"] = current_payload
+            st.session_state["pending_selected_backtest_symbols"] = updated_symbols
+            st.success(f"已准备加入 {len(selected_hit_symbols)} 只标的；页面刷新后会进入回测标的池。")
+
+    with st.expander("其他关注标的", expanded=False):
+        _render_discovery_group_columns(others_df)
 
 
 def _render_status_tab(ctx: WorkspaceContext) -> None:

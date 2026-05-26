@@ -35,7 +35,9 @@ from trend_option_backtest.planning import (
     get_option_position_symbols,
     get_position_symbols,
 )
+import trend_option_backtest.providers.futu_provider as futu_provider_module
 from trend_option_backtest.providers.futu_provider import FutuDataConfig, FutuHistoricalDataProvider, normalize_symbol
+from trend_option_backtest.screening import build_discovery_frame, split_discovery_frame
 from trend_option_backtest.services.backtest_service import BacktestService
 from trend_option_backtest.strategy_templates import STRATEGY_TEMPLATES, apply_strategy_template, build_template_diff_rows, get_template_label
 
@@ -66,6 +68,32 @@ class FakeFutuTradeContext:
         FakeFutuTradeContext.close_count += 1
 
 
+class FakeFutuQuoteContext:
+    group_ret = 0
+    group_data = pd.DataFrame()
+    group_sequence: list[tuple[int, object]] = []
+    security_ret = 0
+    security_data_by_group: dict[str, pd.DataFrame] = {}
+    requested_groups: list[str] = []
+    close_count = 0
+
+    def __init__(self, *, host, port):
+        self.host = host
+        self.port = port
+
+    def get_user_security_group(self):
+        if FakeFutuQuoteContext.group_sequence:
+            return FakeFutuQuoteContext.group_sequence.pop(0)
+        return FakeFutuQuoteContext.group_ret, FakeFutuQuoteContext.group_data
+
+    def get_user_security(self, group_name):
+        FakeFutuQuoteContext.requested_groups.append(group_name)
+        return FakeFutuQuoteContext.security_ret, FakeFutuQuoteContext.security_data_by_group.get(group_name, pd.DataFrame())
+
+    def close(self):
+        FakeFutuQuoteContext.close_count += 1
+
+
 def install_fake_futu_module(monkeypatch):
     FakeFutuTradeContext.position_data = pd.DataFrame()
     FakeFutuTradeContext.position_ret = 0
@@ -74,8 +102,16 @@ def install_fake_futu_module(monkeypatch):
     FakeFutuTradeContext.position_query_args = {}
     FakeFutuTradeContext.account_query_args = {}
     FakeFutuTradeContext.close_count = 0
+    FakeFutuQuoteContext.group_ret = 0
+    FakeFutuQuoteContext.group_data = pd.DataFrame()
+    FakeFutuQuoteContext.group_sequence = []
+    FakeFutuQuoteContext.security_ret = 0
+    FakeFutuQuoteContext.security_data_by_group = {}
+    FakeFutuQuoteContext.requested_groups = []
+    FakeFutuQuoteContext.close_count = 0
     fake_module = types.SimpleNamespace(
         OpenSecTradeContext=FakeFutuTradeContext,
+        OpenQuoteContext=FakeFutuQuoteContext,
         RET_OK=0,
         TrdEnv=types.SimpleNamespace(SIMULATE="SIMULATE", REAL="REAL"),
         TrdMarket=types.SimpleNamespace(US="US", HK="HK", HKCC="HKCC", CN="CN", SG="SG"),
@@ -186,6 +222,125 @@ def test_normalize_symbol_defaults_to_us_market():
     assert normalize_symbol("AMD") == "US.AMD"
     assert normalize_symbol("us.nvda") == "US.NVDA"
     assert normalize_symbol("HK.00700") == "HK.00700"
+
+
+def test_futu_provider_reads_watchlist_groups_and_symbols(monkeypatch):
+    install_fake_futu_module(monkeypatch)
+    FakeFutuQuoteContext.group_data = pd.DataFrame({"group_name": ["AI", "港股", "AI"]})
+    FakeFutuQuoteContext.security_data_by_group = {
+        "AI": pd.DataFrame({"code": ["US.AMD", "NVDA", "US.AMD"]}),
+        "港股": pd.DataFrame({"stock_code": ["HK.00700", "HK.03032"]}),
+    }
+
+    provider = FutuHistoricalDataProvider(FutuDataConfig(host="127.0.0.1", port=11111, cache_dir=ROOT / "data" / "cache"))
+    groups = provider.get_watchlist_groups()
+    symbols = provider.get_watchlist_symbols(groups)
+
+    assert groups == ["AI", "港股"]
+    assert symbols == {"AI": ["US.AMD", "US.NVDA"], "港股": ["HK.00700", "HK.03032"]}
+    assert FakeFutuQuoteContext.requested_groups == ["AI", "港股"]
+    assert FakeFutuQuoteContext.close_count == 2
+
+
+def test_futu_provider_retries_watchlist_groups_on_rate_limit(monkeypatch):
+    install_fake_futu_module(monkeypatch)
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(futu_provider_module.time, "sleep", lambda seconds: sleep_calls.append(seconds))
+    FakeFutuQuoteContext.group_sequence = [
+        (1, "获取自选股分组频率太高，请求失败"),
+        (0, pd.DataFrame({"group_name": ["AI", "港股"]})),
+    ]
+
+    provider = FutuHistoricalDataProvider(FutuDataConfig(host="127.0.0.1", port=11111, cache_dir=ROOT / "data" / "cache"))
+    groups = provider.get_watchlist_groups()
+
+    assert groups == ["AI", "港股"]
+    assert sleep_calls == [31.0]
+
+
+def test_futu_provider_paces_full_watchlist_reads(monkeypatch):
+    install_fake_futu_module(monkeypatch)
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(futu_provider_module.time, "sleep", lambda seconds: sleep_calls.append(seconds))
+    group_names = [f"G{index}" for index in range(10)]
+    FakeFutuQuoteContext.group_data = pd.DataFrame({"group_name": group_names})
+    FakeFutuQuoteContext.security_data_by_group = {group: pd.DataFrame({"code": [f"US.T{index}"]}) for index, group in enumerate(group_names)}
+
+    provider = FutuHistoricalDataProvider(FutuDataConfig(host="127.0.0.1", port=11111, cache_dir=ROOT / "data" / "cache"))
+    symbols = provider.get_watchlist_symbols()
+
+    assert list(symbols) == group_names
+    assert sleep_calls == [31.0]
+
+
+def test_futu_provider_watchlist_groups_rate_limit_error_message(monkeypatch):
+    install_fake_futu_module(monkeypatch)
+    monkeypatch.setattr(futu_provider_module.time, "sleep", lambda _seconds: None)
+    FakeFutuQuoteContext.group_sequence = [
+        (1, "获取自选股分组频率太高"),
+        (1, "获取自选股分组频率太高"),
+        (1, "获取自选股分组频率太高"),
+    ]
+
+    provider = FutuHistoricalDataProvider(FutuDataConfig(host="127.0.0.1", port=11111, cache_dir=ROOT / "data" / "cache"))
+    with pytest.raises(RuntimeError) as exc_info:
+        provider.get_watchlist_groups()
+
+    assert "请求过于频繁" in str(exc_info.value)
+
+
+def _make_linear_market_frame(symbol: str, closes: list[float], *, volumes: list[float] | None = None) -> pd.DataFrame:
+    if volumes is None:
+        volumes = [100.0] * len(closes)
+    return pd.DataFrame(
+        {
+            "date": pd.date_range("2026-01-01", periods=len(closes), freq="D"),
+            "symbol": symbol.split(".")[-1],
+            "open": closes,
+            "high": [price * 1.01 for price in closes],
+            "low": [price * 0.99 for price in closes],
+            "close": closes,
+            "volume": volumes,
+        }
+    )
+
+
+def test_discovery_frame_scores_hits_and_sorts_non_matches():
+    config = StrategyConfig(
+        strategy_name="test",
+        default_pool=["US.HIT", "US.NEAR", "US.FAR"],
+        default_backtest_symbols=[],
+        start_date="2026-01-01",
+        backtest_years=0.1,
+        indicator_warmup_days=5,
+        ma_short=3,
+        ma_long=5,
+        volume_ma=3,
+        volume_multiplier=1.2,
+        breakout_days=3,
+        overheat_distance=0.30,
+        entry_position_pct=0.5,
+        use_sector_filter=False,
+        sector_symbol="US.SOXX",
+        initial_capital=90000.0,
+    )
+    market_data = {
+        "US.HIT": _make_linear_market_frame("US.HIT", [10, 11, 12, 13, 14, 15, 19], volumes=[100, 100, 100, 100, 100, 100, 300]),
+        "US.NEAR": _make_linear_market_frame("US.NEAR", [10, 11, 12, 13, 14, 15, 14.8], volumes=[100, 100, 100, 100, 100, 100, 100]),
+        "US.FAR": _make_linear_market_frame("US.FAR", [16, 15, 14, 13, 12, 11, 10], volumes=[100, 100, 100, 100, 100, 100, 100]),
+    }
+
+    frame = build_discovery_frame({"AI": ["US.HIT", "US.NEAR", "US.FAR", "US.HIT260605C120000"]}, market_data, config, plan_capital=90000.0)
+    hits, others = split_discovery_frame(frame)
+
+    assert hits["标的"].tolist() == ["US.HIT"]
+    hit_row = hits.iloc[0]
+    assert hit_row["状态"] == "符合入场"
+    assert hit_row["综合评分"] == 5
+    assert hit_row["首仓参考金额"] == pytest.approx(15000.0)
+    assert "US.HIT260605C120000" not in frame["标的"].tolist()
+    assert others["标的"].tolist()[0] == "US.NEAR"
+    assert "放量" in others.iloc[0]["转入场条件"] or "站上" in others.iloc[0]["转入场条件"]
 
 
 def test_planning_position_helpers_separate_stock_and_options():
