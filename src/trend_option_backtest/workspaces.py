@@ -37,10 +37,11 @@ from trend_option_backtest.models import BacktestResult, StrategyConfig
 from trend_option_backtest.planning import (
     filter_unmatched_option_legs,
     get_position_symbols,
+    normalize_app_symbol,
     normalize_app_symbols,
 )
 from trend_option_backtest.providers.futu_provider import FutuDataConfig, FutuHistoricalDataProvider
-from trend_option_backtest.screening import build_discovery_frame, split_discovery_frame
+from trend_option_backtest.screening import build_discovery_frame, score_symbol_signals, split_discovery_frame
 from trend_option_backtest.strategies.trend_following import TrendFollowingStrategy
 
 
@@ -311,7 +312,7 @@ def _format_price(value: object, symbol: str) -> str:
     return f"{currency}{float(value):,.2f}"
 
 
-def _render_signal_radar(row: pd.Series) -> None:
+def _render_signal_radar(row: pd.Series, *, height: int = 190) -> None:
     labels = ["趋势", "突破", "量能", "共振", "温度", "风险"]
     values = [
         1.0 if bool(row.get("均线趋势")) else 0.35,
@@ -335,13 +336,51 @@ def _render_signal_radar(row: pd.Series) -> None:
         ]
     )
     fig.update_layout(
-        height=190,
+        height=height,
         margin=dict(l=8, r=8, t=8, b=8),
         polar=dict(radialaxis=dict(visible=False, range=[0, 1]), angularaxis=dict(tickfont=dict(size=11))),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
     )
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+
+
+def _build_action_signal_radar_row(plan_row: pd.Series, ctx: WorkspaceContext) -> pd.Series | None:
+    symbol = normalize_app_symbol(str(plan_row.get("标的", "")))
+    if not symbol:
+        return None
+    symbol_data = ctx.market_data.get(symbol)
+    if symbol_data is None:
+        symbol_data = ctx.market_data.get(symbol.split(".", 1)[-1])
+    if symbol_data is None or getattr(symbol_data, "empty", True):
+        return None
+
+    sector_data = ctx.market_data.get(ctx.config.sector_symbol)
+    if sector_data is None:
+        sector_data = ctx.market_data.get(normalize_app_symbol(ctx.config.sector_symbol))
+    signal_df = TrendFollowingStrategy(ctx.config).prepare_with_signals(symbol_data, sector_data)
+    signal_df = signal_df.dropna(subset=["close", "ma_short", "ma_long", "prior_high", "volume_ma"])
+    if signal_df.empty:
+        return None
+
+    last_row = signal_df.iloc[-1]
+    scoring = score_symbol_signals(last_row, ctx.config)
+    signals = dict(scoring["signals"])
+    close = float(last_row.get("close", 0.0) or 0.0)
+    ma_short = float(last_row.get("ma_short", 0.0) or 0.0)
+    prior_high = float(last_row.get("prior_high", 0.0) or 0.0)
+    entry_price = max(ma_short, prior_high)
+    distance_to_entry = close / entry_price - 1 if close > 0 and entry_price > 0 else float(plan_row.get("距关键价位", 0.0) or 0.0)
+    return pd.Series(
+        {
+            "均线趋势": bool(signals.get("trend_ok")),
+            "价格突破": bool(signals.get("breakout_ok")),
+            "成交量确认": bool(signals.get("volume_ok")),
+            "行业共振": bool(signals.get("sector_ok")),
+            "未过热": bool(signals.get("temperature_ok")),
+            "距入场参考": distance_to_entry,
+        }
+    )
 
 
 def _render_discovery_symbol_card(row: pd.Series) -> None:
@@ -828,25 +867,51 @@ def _render_today_actions(ctx: WorkspaceContext) -> None:
                 _detail_lines.append(
                     f"<div style='color:#64748B;font-size:0.9rem;margin-top:4px;line-height:1.5;'>{_plan_note}</div>"
                 )
-
-            st.markdown(
-                f"""
-                <div style='background:#FFFFFF;border:1px solid #E2E8F0;border-left:5px solid {_pfg};border-radius:12px;
-                            padding:16px 20px;margin-bottom:12px;box-shadow:0 1px 3px rgba(15,23,42,0.05);'>
-                    <div style='display:flex;align-items:center;flex-wrap:wrap;gap:12px;'>
-                        <span style='background:{_bg};color:{_fg};padding:5px 14px;border-radius:999px;
-                                     font-weight:700;font-size:0.95rem;letter-spacing:0.3px;'>{_action_text}</span>
-                        <span style='font-size:1.4rem;font-weight:800;color:#0F172A;letter-spacing:-0.3px;'>{_row.get('标的', '')}</span>
-                        <span style='background:{_pbg};color:{_pfg};padding:4px 12px;border-radius:7px;
-                                     font-weight:700;font-size:0.9rem;'>{_priority_text}</span>
-                        <span style='margin-left:auto;font-weight:800;font-size:1.5rem;color:#0F172A;letter-spacing:-0.3px;'>{_amt_text}</span>
+            _radar_row = _build_action_signal_radar_row(_row, ctx)
+            with st.container(border=True):
+                st.markdown(
+                    f"""
+                    <div style='border-left:5px solid {_pfg};padding-left:14px;'>
+                        <div style='display:flex;align-items:center;flex-wrap:wrap;gap:12px;'>
+                            <span style='background:{_bg};color:{_fg};padding:5px 14px;border-radius:999px;
+                                         font-weight:700;font-size:0.95rem;letter-spacing:0.3px;'>{_action_text}</span>
+                            <span style='font-size:1.4rem;font-weight:800;color:#0F172A;letter-spacing:-0.3px;'>{_row.get('标的', '')}</span>
+                            <span style='background:{_pbg};color:{_pfg};padding:4px 12px;border-radius:7px;
+                                         font-weight:700;font-size:0.9rem;'>{_priority_text}</span>
+                            <span style='margin-left:auto;font-weight:800;font-size:1.5rem;color:#0F172A;letter-spacing:-0.3px;'>{_amt_text}</span>
+                        </div>
                     </div>
-                    {('<div style="color:#475569;font-size:0.98rem;margin-top:12px;line-height:1.5;font-weight:500;">' + _meta_text + '</div>') if _meta_text else ''}
-                    {''.join(_detail_lines)}
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+                    """,
+                    unsafe_allow_html=True,
+                )
+                if _radar_row is None:
+                    st.markdown(
+                        f"""
+                        {('<div style="color:#475569;font-size:0.98rem;line-height:1.5;font-weight:500;">' + _meta_text + '</div>') if _meta_text else ''}
+                        {''.join(_detail_lines)}
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    _radar_col, _detail_col = st.columns([0.72, 1.35], gap="small")
+                    with _radar_col:
+                        _render_signal_radar(_radar_row, height=150)
+                    with _detail_col:
+                        _signal_labels = []
+                        for _label in ["均线趋势", "价格突破", "成交量确认", "行业共振", "未过热"]:
+                            _is_on = bool(_radar_row.get(_label))
+                            _tag_bg = "#DCFCE7" if _is_on else "#F8FAFC"
+                            _tag_fg = "#166534" if _is_on else "#64748B"
+                            _tag_bd = "#BBF7D0" if _is_on else "#E2E8F0"
+                            _signal_labels.append(f"<span style='background:{_tag_bg};color:{_tag_fg};border:1px solid {_tag_bd};border-radius:999px;padding:4px 9px;font-size:0.74rem;font-weight:800;white-space:nowrap;'>{_label}</span>")
+                        st.markdown(
+                            f"""
+                            <div style='display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 8px;'>{''.join(_signal_labels)}</div>
+                            {('<div style="color:#475569;font-size:0.95rem;line-height:1.5;font-weight:500;">' + _meta_text + '</div>') if _meta_text else ''}
+                            {''.join(_detail_lines)}
+                            """,
+                            unsafe_allow_html=True,
+                        )
         if len(ctx.strategy_plan_df) > len(_top_rows):
             st.caption(f"还有 {len(ctx.strategy_plan_df) - len(_top_rows)} 条次优先动作，展开右侧「全部行动计划表」查看。")
 
